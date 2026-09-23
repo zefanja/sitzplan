@@ -1,0 +1,1163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sitzplan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --bg:#E4E9EB; --panel:#FFFFFF; --ink:#1F2A30; --muted:#5E6A71; --line:#D2D9DC; --hover:#EEF2F3;
+  --accent:#2E6B57; --accent-ink:#FFFFFF; --accent-soft:#D6E8E0;
+  --danger:#B4462F; --warn:#B7862A; --m:#3F6FA6; --w:#B04F86; --d:#7C7C7C;
+  --paper-ink:#1A1A1A;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1A2125; --panel:#232C31; --ink:#E2E8EA; --muted:#9AA6AC; --line:#38444B; --hover:#2B363C;
+    --accent:#5FA98C; --accent-ink:#0F1A15; --accent-soft:#2C4A3E; --danger:#E0775F; --warn:#D9AE55;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1A2125; --panel:#232C31; --ink:#E2E8EA; --muted:#9AA6AC; --line:#38444B; --hover:#2B363C;
+  --accent:#5FA98C; --accent-ink:#0F1A15; --accent-soft:#2C4A3E; --danger:#E0775F; --warn:#D9AE55;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 11px}
+button:hover{background:var(--hover)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+button.primary:hover{filter:brightness(1.07)}
+button.danger{color:var(--danger)}
+button.ghost{border-color:transparent;background:transparent}
+button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=text],input[type=number],select,textarea{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:5px 8px;min-width:0}
+textarea{resize:vertical}
+
+/* top bar */
+header.top{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-weight:600;font-size:16px;margin-right:6px;display:flex;align-items:center;gap:8px}
+.brand svg{width:22px;height:22px}
+.top label.inl{display:flex;align-items:center;gap:6px;color:var(--muted)}
+.top label.inl input{width:120px;color:var(--ink)}
+.top .spacer{flex:1}
+#status{color:var(--muted);font-size:12.5px}
+#clsSel{max-width:180px}
+
+/* main */
+main{display:grid;grid-template-columns:320px 1fr;min-height:0}
+#side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+#side.dropzone{box-shadow:inset 0 0 0 3px var(--accent)}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 6px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
+#sideBody{overflow:auto;padding:14px;flex:1}
+#sideBody h3{font-size:13px;font-weight:600;margin:18px 0 8px}
+#sideBody h3:first-child{margin-top:0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.meta{color:var(--muted);font-size:12.5px;margin:10px 0 0}
+.hint{color:var(--muted);font-size:12.5px;margin:6px 0}
+.srow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:grab;user-select:none}
+.srow:hover{background:var(--hover)}
+.srow.placed .sn{color:var(--muted)}
+.srow.bad .sn{color:var(--danger)}
+.grip{color:var(--muted);touch-action:none;font-size:12px;padding:0 2px}
+.gd{width:9px;height:9px;border-radius:50%;flex:none;border:1.5px solid var(--line)}
+.g-m{background:var(--m);border-color:var(--m)} .g-w{background:var(--w);border-color:var(--w)} .g-d{background:var(--d);border-color:var(--d)}
+.sn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:11px;padding:1px 6px;border-radius:9px;background:var(--hover);color:var(--muted);white-space:nowrap}
+.field{display:grid;gap:4px;margin-bottom:10px}
+.field>span{font-size:12.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.chk{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.chk input{margin-top:3px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:5px 10px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--accent-soft);font-weight:500}
+.rule-form{display:grid;gap:6px}
+.rrow{display:flex;align-items:center;gap:8px;padding:5px 4px;border-bottom:1px solid var(--line)}
+.rrow .txt{flex:1;font-size:13.5px}
+.rrow em{font-style:normal;color:var(--muted)}
+.st{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none;font-weight:600}
+.st-ok .st{background:var(--accent-soft);color:var(--accent)}
+.st-bad .st{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
+.st-warn .st{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.st-open .st{background:var(--hover);color:var(--muted)}
+.x{border:0;background:transparent;color:var(--muted);padding:2px 6px;font-size:16px;line-height:1}
+.x:hover{color:var(--danger);background:transparent}
+
+/* stage */
+.stage{display:grid;grid-template-rows:auto auto 1fr;min-width:0;min-height:0}
+.toolbar{display:flex;align-items:center;gap:6px;padding:8px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--panel)}
+.toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.toolbar button{padding:5px 9px}
+.ctx{display:flex;align-items:center;gap:8px;padding:6px 12px;min-height:40px;flex-wrap:wrap;color:var(--muted);font-size:13px;border-bottom:1px solid var(--line)}
+.ctx strong{color:var(--ink);font-weight:500}
+#scroller{overflow:auto;padding:28px;min-height:0;display:flex}
+#page{position:relative;margin:auto;background:#fff;color:var(--paper-ink);box-shadow:0 1px 3px rgba(0,0,0,.18),0 8px 28px rgba(0,0,0,.10);flex:none;touch-action:none;user-select:none}
+.phead{position:absolute;font-weight:400;white-space:nowrap;pointer-events:none;display:flex;gap:1.2em}
+.phead u{text-decoration:none;display:inline-block;border-bottom:1px solid #111;min-width:4.2em;padding:0 .2em;line-height:1.1}
+.desk{position:absolute;cursor:move;box-sizing:border-box}
+.desk.sel,.item.sel{outline:2px solid var(--accent);outline-offset:3px}
+.desk.out{outline:2px dashed var(--danger);outline-offset:3px}
+.seat{position:absolute;top:0;bottom:0;display:grid;grid-template-rows:var(--h1) var(--h2) 1fr;border:1px solid #222;background:#fff;box-sizing:border-box}
+.seat>*{min-height:0}
+.nm{background:#EBEBEB;border-bottom:1px solid #222;position:relative;box-sizing:content-box}
+.mid,.bot{display:grid;grid-template-columns:1fr 1fr}
+.mid{border-bottom:1px solid #222;font-size:var(--f9);box-sizing:content-box}
+.bot{font-size:var(--f10)}
+.mid span,.bot span{display:flex;align-items:center;padding-left:calc(var(--s) * 1.8px)}
+.mid span+span,.bot span+span{border-left:1px solid #222}
+.seat.drop .nm{background:#BFDCCF}
+.chip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:500;cursor:grab;white-space:nowrap;overflow:hidden;touch-action:none;color:#111}
+.chip .gdot{position:absolute;left:3px;top:3px;width:6px;height:6px;border-radius:50%}
+.chip.bad{box-shadow:inset 0 0 0 2px var(--danger);color:#8E2B18}
+.chip.warn{box-shadow:inset 0 0 0 2px #C99A33}
+.lockbtn{position:absolute;right:1px;top:1px;width:16px;height:16px;padding:0;border:0;background:transparent;display:none;place-items:center;color:#555;cursor:pointer;z-index:2}
+.lockbtn svg{width:11px;height:11px}
+.seat:hover .lockbtn,.lockbtn.on{display:grid}
+.lockbtn.on{color:var(--accent)}
+.item{position:absolute;border:1.5px solid #555;background:#F3F3F3;display:flex;align-items:center;justify-content:center;color:#444;cursor:move;overflow:hidden;text-align:center;line-height:1.1}
+.item.k-text{border:1px dashed transparent;background:transparent;color:#222}
+.item.k-text:hover{border-color:#bbb}
+.item.k-fenster{background:#EAF2F6;border-color:#7a9aad}
+.item.vert span{writing-mode:vertical-rl;transform:rotate(180deg)}
+.rz{position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:var(--accent);border-radius:2px;cursor:nwse-resize;display:none}
+.item.sel .rz{display:block}
+.band{position:absolute;border:1px solid var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);pointer-events:none}
+.ghost{position:fixed;z-index:50;pointer-events:none;background:#EBEBEB;border:1px solid #333;padding:4px 10px;border-radius:3px;font-weight:500;color:#111;box-shadow:0 6px 18px rgba(0,0,0,.25);transform:translate(-50%,-60%)}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 16px;border-radius:8px;font-size:13.5px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:90vw}
+#toast.show{opacity:1}
+
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:0;width:min(520px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(20,28,32,.45)}
+.dlg{padding:18px 20px;display:grid;gap:10px;overflow:auto;max-height:90vh}
+.dlg h2{margin:0 0 4px;font-size:17px;font-weight:600}
+.dlg h3{margin:10px 0 2px;font-size:13px;font-weight:600}
+.dlg footer{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.dlg footer .left{margin-right:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.pchip{display:inline-flex;align-items:center;gap:4px;background:var(--hover);border-radius:14px;padding:2px 4px 2px 10px;font-size:13px}
+.pchip.apart{background:color-mix(in srgb,var(--danger) 14%,transparent)}
+.pchip.with{background:var(--accent-soft)}
+
+@media (max-width:820px){
+  body{overflow:auto;display:block}
+  main{grid-template-columns:1fr}
+  #side{border-right:0;border-bottom:1px solid var(--line);max-height:46vh}
+  .stage{min-height:70vh}
+  .top label.inl input{width:70px}
+}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="8" height="6"/><rect x="13.5" y="4" width="8" height="6"/><rect x="2.5" y="14" width="8" height="6"/><rect x="13.5" y="14" width="8" height="6"/><path d="M2.5 6.2h8M13.5 6.2h8M2.5 16.2h8M13.5 16.2h8" /></svg>
+    Sitzplan
+  </div>
+  <select id="clsSel" aria-label="Klasse wählen"></select>
+  <button id="btnNewCls">Neue Klasse</button>
+  <label class="inl">Klasse <input type="text" id="inName"></label>
+  <label class="inl">Fach <input type="text" id="inSubj"></label>
+  <span class="spacer"></span>
+  <span id="status">Lädt …</span>
+  <button class="primary" id="btnExport">PDF exportieren</button>
+</header>
+<main>
+  <aside id="side">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="sch" aria-selected="true">Schüler</button>
+      <button role="tab" data-tab="reg" aria-selected="false">Regeln</button>
+      <button role="tab" data-tab="kla" aria-selected="false">Klasse &amp; Layout</button>
+    </div>
+    <div id="sideBody"></div>
+  </aside>
+  <section class="stage">
+    <div class="toolbar">
+      <button data-tb="desk2">Doppeltisch</button>
+      <button data-tb="desk1">Einzeltisch</button>
+      <select id="addItem" aria-label="Raumelement hinzufügen">
+        <option value="">Raumelement …</option>
+        <option value="tafel">Tafel</option>
+        <option value="pult">Lehrertisch</option>
+        <option value="tuer">Tür</option>
+        <option value="fenster">Fenster</option>
+        <option value="text">Textfeld</option>
+      </select>
+      <span class="sep"></span>
+      <button data-tb="undo" title="Rückgängig (Strg+Z)">Rückgängig</button>
+      <button data-tb="redo" title="Wiederholen (Strg+Y)">Wiederholen</button>
+      <span class="sep"></span>
+      <label class="chk" style="margin:0"><input type="checkbox" id="snap" checked> Am Raster ausrichten</label>
+      <span class="sep"></span>
+      <button data-tb="zout" aria-label="Verkleinern">−</button>
+      <button data-tb="zfit">Einpassen</button>
+      <button data-tb="zin" aria-label="Vergrößern">+</button>
+    </div>
+    <div class="ctx" id="ctx"></div>
+    <div id="scroller"><div id="page"></div></div>
+  </section>
+</main>
+
+<dialog id="dlgImport"><div class="dlg">
+  <h2>Namen importieren</h2>
+  <p class="hint" style="margin:0">Ein Schüler pro Zeile. Optional mit Tab oder Semikolon getrennt eine Spalte für das Geschlecht (m / w). „Nachname, Vorname“ wird erkannt. Eine Kopfzeile wird übersprungen.</p>
+  <textarea id="impText" rows="10" placeholder="Anna Müller; w&#10;Ben Schulz; m&#10;Yilmaz, Can&#10;…"></textarea>
+  <div class="grid2">
+    <label class="field"><span>Reihenfolge ohne Komma</span>
+      <select id="impOrder"><option value="vn">Vorname Nachname</option><option value="nv">Nachname Vorname</option></select></label>
+    <label class="field"><span>Oder Datei (.txt, .csv)</span><input type="file" id="impFile" accept=".txt,.csv,text/plain,text/csv"></label>
+  </div>
+  <label class="chk"><input type="checkbox" id="impReplace"> Bestehende Schülerliste ersetzen</label>
+  <p class="hint" id="impPreview">0 Namen erkannt</p>
+  <footer><button data-close>Abbrechen</button><button class="primary" id="impGo">Importieren</button></footer>
+</div></dialog>
+
+<dialog id="dlgStudent"><div class="dlg" id="stuBody"></div></dialog>
+
+<dialog id="dlgExport"><div class="dlg">
+  <h2>PDF exportieren</h2>
+  <label class="chk"><input type="checkbox" id="exNames" checked> Namen in die grauen Felder eintragen</label>
+  <label class="chk"><input type="checkbox" id="exItems" checked> Raumelemente mitdrucken (Tafel, Lehrertisch, Tür …)</label>
+  <label class="chk"><input type="checkbox" id="exAll"> Alle Klassen in eine Datei (eine Seite pro Klasse)</label>
+  <label class="chk"><input type="checkbox" id="exNamesOnly"> Nur Namen groß drucken, ohne Notizfelder (Vorlage für den Lehrertisch)</label>
+  <footer><button data-close>Abbrechen</button><button class="primary" id="exGo">PDF herunterladen</button></footer>
+</div></dialog>
+
+<dialog id="dlgConfirm"><div class="dlg">
+  <h2 id="cfTitle">Sicher?</h2>
+  <p id="cfText" style="margin:0"></p>
+  <footer><button id="cfNo">Abbrechen</button><button class="primary" id="cfYes">OK</button></footer>
+</div></dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+// ---------- constants ----------
+const PAGE = { quer: { w: 297, h: 210 }, hoch: { w: 210, h: 297 } };
+const H1 = 9.6, H3 = 9.6, MID_DEFAULT = 15;
+const dh = c => H1 + c.midH + H3;
+const PT = 0.3528;          // mm per pt
+const NB = 14;              // mm: desks closer than this count as neighbours
+const GRID = 2.5;           // snap in mm
+const LS_KEY = 'sitzplan-v1';
+const ITEM_DEF = {
+  tafel: { w: 90, h: 9, text: 'Tafel' }, pult: { w: 42, h: 18, text: 'Lehrertisch' },
+  tuer: { w: 22, h: 6, text: 'Tür' }, fenster: { w: 6, h: 70, text: 'Fenster' }, text: { w: 40, h: 8, text: 'Text' }
+};
+const LOCK_SVG = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 7V5a4 4 0 0 1 8 0v2h1v8H3V7h1zm2 0h4V5a2 2 0 0 0-4 0v2z"/></svg>';
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+const r1 = v => Math.round(v * 10) / 10;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rid = () => Math.random().toString(36).slice(2, 10);
+const fullName = s => (s.first + ' ' + s.last).trim() || '?';
+const byFirst = (a, b) => fullName(a).localeCompare(fullName(b), 'de');
+let toastT;
+function toast(msg, ms = 2800) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms); }
+const capCache = {};
+function getCap(name) {
+  if (!(window.claude && typeof window.claude.use === 'function')) return Promise.resolve(null);
+  if (!capCache[name]) capCache[name] = window.claude.use(name).catch(() => null);
+  return capCache[name];
+}
+function askConfirm(title, text, yes = 'OK') {
+  return new Promise(res => {
+    const d = $('#dlgConfirm'); $('#cfTitle').textContent = title; $('#cfText').textContent = text; $('#cfYes').textContent = yes;
+    const done = v => { d.close(); $('#cfYes').onclick = $('#cfNo').onclick = null; res(v); };
+    $('#cfYes').onclick = () => done(true); $('#cfNo').onclick = () => done(false);
+    d.onclose = () => res(false);
+    d.showModal();
+  });
+}
+
+// ---------- model ----------
+let S = { classes: [], cur: null };
+let sel = new Set();
+let tab = 'sch';
+let zoom = 1, scale = 3;
+const hist = {}; // classId -> {u:[], r:[]}
+
+function newClass(name = 'Neue Klasse') {
+  return { id: 'k' + rid(), name, subject: '', orientation: 'quer', seatW: 40, midH: MID_DEFAULT, nameFormat: 'vn', nameAlign: 'center',
+    students: [], rules: [], desks: [], items: [], grid: { rows: 4, cols: 3, n: 2 },
+    gen: { mix: true, front: true, neighbors: true, frontSide: 'oben' } };
+}
+function normalize(c) {
+  const d = newClass();
+  for (const k of Object.keys(d)) if (c[k] === undefined) c[k] = d[k];
+  c.gen = Object.assign({}, d.gen, c.gen);
+  c.grid = Object.assign({}, d.grid, c.grid);
+  const ids = new Set(c.students.map(s => s.id));
+  c.desks.forEach(k => {
+    k.n = clamp(k.n | 0 || 2, 1, 4);
+    k.a = Array.from({ length: k.n }, (_, i) => (k.a && ids.has(k.a[i])) ? k.a[i] : null);
+    k.l = Array.from({ length: k.n }, (_, i) => !!(k.l && k.l[i]));
+  });
+  c.rules = c.rules.filter(r => ids.has(r.a) && ids.has(r.b) && r.a !== r.b);
+  return c;
+}
+const cls = () => S.classes.find(c => c.id === S.cur);
+const H = () => (hist[S.cur] ||= { u: [], r: [] });
+const deskW = (c, d) => d.n * c.seatW;
+function findObj(c, id) { return c.desks.find(d => d.id === id) || c.items.find(i => i.id === id); }
+
+function makeGrid(c, rows, cols, n) {
+  const P = PAGE[c.orientation], dw = n * c.seatW, mx = c.orientation === 'quer' ? 11 : 8, top = 21, bottom = 8;
+  let gx = cols > 1 ? (P.w - 2 * mx - cols * dw) / (cols - 1) : 0; gx = clamp(gx, 3, 45);
+  const x0 = Math.max(2, (P.w - (cols * dw + (cols - 1) * gx)) / 2);
+  let gy = rows > 1 ? (P.h - top - bottom - rows * dh(c)) / (rows - 1) : 0; gy = clamp(gy, 3, 30);
+  c.desks = [];
+  for (let r = 0; r < rows; r++) for (let k = 0; k < cols; k++)
+    c.desks.push({ id: 'd' + rid(), x: r1(x0 + k * (dw + gx)), y: r1(top + r * (dh(c) + gy)), n, a: Array(n).fill(null), l: Array(n).fill(false) });
+}
+
+// ---------- persistence ----------
+let remote = null, dirty = new Set(), saveT = null, remoteState = 'connecting';
+function saveLocal() { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch (e) {} }
+function setStatus() {
+  const el = $('#status');
+  if (dirty.size || saveT) el.textContent = 'Speichert …';
+  else if (remoteState === 'ok') el.textContent = 'Gespeichert';
+  else if (remoteState === 'error') el.textContent = 'Speichern fehlgeschlagen, lokal gesichert';
+  else if (remoteState === 'connecting') el.textContent = 'Verbindet …';
+  else el.textContent = 'In diesem Browser gespeichert';
+}
+function markDirty(c) {
+  dirty.add(c.id); saveLocal(); clearTimeout(saveT);
+  saveT = setTimeout(flush, 900); setStatus();
+}
+async function flush() {
+  saveT = null;
+  if (!remote) { dirty.clear(); setStatus(); return; }
+  const ids = [...dirty]; dirty.clear(); setStatus();
+  for (const id of ids) {
+    const c = S.classes.find(x => x.id === id);
+    try {
+      if (c) await remote.doc(id).set({ json: JSON.stringify(c), name: c.name, updated: Date.now() });
+      else await remote.doc(id).delete();
+      remoteState = 'ok';
+    } catch (e) { remoteState = 'error'; console.warn(e); }
+  }
+  setStatus();
+}
+function loadLocal() {
+  try { const j = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); if (j && Array.isArray(j.classes)) S = j; } catch (e) {}
+  if (!S.classes.length) { const c = newClass('7a'); c.subject = 'Mathematik'; makeGrid(c, 4, 3, 2); S.classes.push(c); S.cur = c.id; }
+  S.classes.forEach(normalize);
+  if (!cls()) S.cur = S.classes[0].id;
+}
+async function connectRemote() {
+  try {
+    const db = await getCap('db'); const user = await getCap('user');
+    const uid = user ? await user.id() : null;
+    if (!db || !uid) { remoteState = 'local'; setStatus(); return; }
+    remote = db.doc('data/users/' + uid + '/sitzplan').collection('klassen');
+    const snap = await remote.get();
+    if (!snap.empty) {
+      const list = snap.docs.map(d => { try { return normalize(JSON.parse(d.data().json)); } catch (e) { return null; } }).filter(Boolean);
+      if (list.length) {
+        list.sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
+        S.classes = list; if (!cls()) S.cur = list[0].id;
+        for (const k in hist) delete hist[k];
+        sel.clear(); saveLocal(); renderAll();
+      }
+    } else {
+      S.classes.forEach(c => dirty.add(c.id)); await flush();
+    }
+    remoteState = 'ok'; setStatus();
+  } catch (e) { console.warn(e); remote = null; remoteState = 'local'; setStatus(); }
+}
+
+// ---------- mutations ----------
+function mutate(fn, opts = {}) {
+  const c = cls(); const h = H();
+  h.u.push(JSON.stringify(c)); if (h.u.length > 80) h.u.shift(); h.r = [];
+  fn(c); markDirty(c);
+  if (opts.render !== false) renderAll();
+}
+function restore(json) { const c = normalize(JSON.parse(json)); const i = S.classes.findIndex(x => x.id === c.id); S.classes[i] = c; markDirty(c); }
+function undo() { const h = H(); if (!h.u.length) return; h.r.push(JSON.stringify(cls())); restore(h.u.pop()); renderAll(); }
+function redo() { const h = H(); if (!h.r.length) return; h.u.push(JSON.stringify(cls())); restore(h.r.pop()); renderAll(); }
+
+function seatOf(c, sid) { for (const d of c.desks) { const i = d.a.indexOf(sid); if (i >= 0) return { d, i }; } return null; }
+function assign(sid, deskId, i) {
+  mutate(c => {
+    const d = c.desks.find(x => x.id === deskId); if (!d) return;
+    const from = seatOf(c, sid); const occ = d.a[i];
+    if (from && from.d === d && from.i === i) return;
+    d.a[i] = sid;
+    if (from) from.d.a[from.i] = occ || null;
+  });
+}
+function unassign(sid) { mutate(c => { const f = seatOf(c, sid); if (f) f.d.a[f.i] = null; }); }
+function setSeatCount(d, n) {
+  const a = d.a.slice(0, n), l = d.l.slice(0, n);
+  while (a.length < n) { a.push(null); l.push(false); }
+  d.n = n; d.a = a; d.l = l;
+}
+function freeSpot(c, w, h) {
+  const P = PAGE[c.orientation];
+  const st = document.getElementById('scroller'), pr = document.getElementById('page').getBoundingClientRect(), sr = st.getBoundingClientRect();
+  let cx = ((sr.left + sr.width / 2) - pr.left) / scale, cy = ((sr.top + sr.height / 2) - pr.top) / scale;
+  let x = clamp(cx - w / 2, 0, P.w - w), y = clamp(cy - h / 2, 0, P.h - h);
+  for (let k = 0; k < 30; k++) {
+    const hit = [...c.desks.map(d => ({ x: d.x, y: d.y, w: deskW(c, d), h: dh(c) })), ...c.items].some(o => x < o.x + o.w && o.x < x + w && y < o.y + o.h && o.y < y + h && Math.abs(o.x - x) < 3 && Math.abs(o.y - y) < 3);
+    if (!hit) break; x += 5; y += 5;
+  }
+  return { x: r1(x), y: r1(y) };
+}
+function addDesk(n) {
+  mutate(c => { const p = freeSpot(c, n * c.seatW, dh(c)); const d = { id: 'd' + rid(), x: p.x, y: p.y, n, a: Array(n).fill(null), l: Array(n).fill(false) }; c.desks.push(d); sel = new Set([d.id]); });
+}
+function addItem(kind) {
+  mutate(c => { const def = ITEM_DEF[kind], P = PAGE[c.orientation]; let p = freeSpot(c, def.w, def.h);
+    if (kind === 'tafel') p = { x: r1((P.w - def.w) / 2), y: r1(P.h - def.h - 2) };
+    else if (kind === 'pult') p = { x: r1(P.w - def.w - 12), y: r1(P.h - def.h - 2) };
+    else if (kind === 'tuer') p = { x: r1(P.w - def.w - 12), y: 2 };
+    else if (kind === 'fenster') p = { x: 1, y: r1((P.h - def.h) / 2) }; const it = { id: 'i' + rid(), kind, x: p.x, y: p.y, w: def.w, h: def.h, text: def.text }; c.items.push(it); sel = new Set([it.id]); });
+}
+function deleteSel() {
+  if (!sel.size) return;
+  mutate(c => { c.desks = c.desks.filter(d => !sel.has(d.id)); c.items = c.items.filter(i => !sel.has(i.id)); sel.clear(); });
+}
+function duplicateSel() {
+  if (!sel.size) return;
+  mutate(c => {
+    const nsel = new Set();
+    c.desks.filter(d => sel.has(d.id)).forEach(d => { const nd = { id: 'd' + rid(), x: r1(d.x + 5), y: r1(d.y + 5), n: d.n, a: Array(d.n).fill(null), l: Array(d.n).fill(false) }; c.desks.push(nd); nsel.add(nd.id); });
+    c.items.filter(i => sel.has(i.id)).forEach(i => { const ni = { ...i, id: 'i' + rid(), x: r1(i.x + 5), y: r1(i.y + 5) }; c.items.push(ni); nsel.add(ni.id); });
+    sel = nsel;
+  });
+}
+function changeOrientation(o) {
+  const c0 = cls(); if (c0.orientation === o) return;
+  mutate(c => {
+    const A = PAGE[c.orientation], B = PAGE[o];
+    const fx = B.w / A.w, fy = B.h / A.h;
+    if (o === 'hoch' && c.seatW === 40) c.seatW = 30;
+    else if (o === 'quer' && c.seatW === 30) c.seatW = 40;
+    c.desks.forEach(d => { d.x = r1(d.x * fx); d.y = r1(21 + (d.y - 21) * fy); });
+    c.items.forEach(i => { i.x = r1(i.x * fx); i.y = r1(i.y * fy); });
+    c.orientation = o;
+  });
+}
+
+// ---------- analysis ----------
+function dispNames(c) {
+  const m = new Map(), cnt = {};
+  c.students.forEach(s => { const k = s.first.toLowerCase(); cnt[k] = (cnt[k] || 0) + 1; });
+  c.students.forEach(s => {
+    const li = s.last ? s.last.trim()[0] + '.' : '';
+    let n;
+    switch (c.nameFormat) {
+      case 'v': n = (cnt[s.first.toLowerCase()] > 1 && li) ? s.first + ' ' + li : s.first; break;
+      case 'vnn': n = fullName(s); break;
+      case 'nv': n = s.last ? s.last + ', ' + s.first : s.first; break;
+      default: n = li ? s.first + ' ' + li : s.first;
+    }
+    m.set(s.id, (n || '').trim() || '?');
+  });
+  return m;
+}
+function neighborMatrix(c) {
+  const D = c.desks, n = D.length, m = Array.from({ length: n }, () => new Uint8Array(n));
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a = D[i], b = D[j], aw = deskW(c, a), bw = deskW(c, b);
+    const dx = Math.max(0, Math.max(a.x, b.x) - Math.min(a.x + aw, b.x + bw));
+    const dy = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + dh(c), b.y + dh(c)));
+    if (dx <= NB && dy <= NB) m[i][j] = m[j][i] = 1;
+  }
+  return m;
+}
+function analyze(c) {
+  const pos = new Map();
+  c.desks.forEach((d, di) => d.a.forEach((sid, i) => { if (sid) pos.set(sid, { di, i }); }));
+  const nb = neighborMatrix(c);
+  const status = c.rules.map(r => {
+    const A = pos.get(r.a), B = pos.get(r.b);
+    if (!A || !B) return 'open';
+    const same = A.di === B.di, near = !same && nb[A.di][B.di];
+    if (r.t === 'with') return same ? 'ok' : 'bad';
+    return same ? 'bad' : (near && c.gen.neighbors ? 'warn' : 'ok');
+  });
+  const bad = new Set(), warn = new Set();
+  status.forEach((s, k) => { const r = c.rules[k]; if (s === 'bad') { bad.add(r.a); bad.add(r.b); } else if (s === 'warn') { warn.add(r.a); warn.add(r.b); } });
+  return { pos, nb, status, bad, warn };
+}
+function frontRank(c) {
+  const t = c.items.find(i => i.kind === 'tafel');
+  const v = c.desks.map(d => {
+    const cx = d.x + deskW(c, d) / 2, cy = d.y + dh(c) / 2;
+    if (t) return Math.hypot(cx - (t.x + t.w / 2), cy - (t.y + t.h / 2));
+    return c.gen.frontSide === 'unten' ? -cy : cy;
+  });
+  const lo = Math.min(...v), hi = Math.max(...v);
+  return v.map(x => hi > lo ? (x - lo) / (hi - lo) : 0);
+}
+
+// ---------- generator ----------
+function generate() {
+  const c = cls();
+  if (!c.desks.length) { toast('Zuerst Tische anlegen.'); return; }
+  if (!c.students.length) { toast('Zuerst Schüler importieren.'); return; }
+  const sidx = new Map(c.students.map((s, k) => [s.id, k]));
+  const seats = [];
+  c.desks.forEach((d, di) => { for (let i = 0; i < d.n; i++) seats.push({ di, i, locked: !!(d.l[i] && d.a[i] && sidx.has(d.a[i])), sid: d.a[i] }); });
+  const fixed = new Set(seats.filter(s => s.locked).map(s => s.sid));
+  const free = c.students.filter(s => !fixed.has(s.id)).map(s => sidx.get(s.id));
+  const freeSeats = seats.map((s, k) => s.locked ? -1 : k).filter(k => k >= 0);
+  const N = c.students.length, SN = seats.length;
+  const gender = c.students.map(s => s.gender), front = c.students.map(s => !!s.front);
+  const deskOf = seats.map(s => s.di), idxIn = seats.map(s => s.i);
+  const nb = neighborMatrix(c), rank = frontRank(c);
+  const deskSeats = c.desks.map(() => []); seats.forEach((s, k) => deskSeats[s.di].push(k));
+  const rules = c.rules.filter(r => sidx.has(r.a) && sidx.has(r.b)).map(r => [sidx.get(r.a), sidx.get(r.b), r.t === 'with' ? 1 : 0]);
+  const g = c.gen;
+  const A = new Int16Array(SN).fill(-1);
+  seats.forEach((s, k) => { if (s.locked) A[k] = sidx.get(s.sid); });
+  const posOf = new Int16Array(N);
+  // slots: free seats + bench (for overflow)
+  const L = Math.max(free.length, freeSeats.length);
+  const slotSeat = Array.from({ length: L }, (_, k) => k < freeSeats.length ? freeSeats[k] : -1);
+  const arr = Array.from({ length: L }, (_, k) => k < free.length ? free[k] : -1);
+
+  function cost() {
+    posOf.fill(-1);
+    for (let k = 0; k < SN; k++) if (A[k] >= 0) posOf[A[k]] = k;
+    let C = 0;
+    for (const [a, b, t] of rules) {
+      const pa = posOf[a], pb = posOf[b];
+      if (pa < 0 || pb < 0) { if (t) C += 30; continue; }
+      const da = deskOf[pa], db = deskOf[pb];
+      if (t) C += da === db ? (Math.abs(idxIn[pa] - idxIn[pb]) === 1 ? 0 : 3) : (nb[da][db] ? 40 : 100);
+      else if (da === db) C += Math.abs(idxIn[pa] - idxIn[pb]) === 1 ? 120 : 60;
+      else if (g.neighbors && nb[da][db]) C += 25;
+    }
+    for (let d = 0; d < deskSeats.length; d++) {
+      const ks = deskSeats[d]; let occ = 0;
+      for (let j = 0; j < ks.length; j++) {
+        const s = A[ks[j]];
+        if (s >= 0) occ++; else C += (1 - rank[d]) * 1.5;
+        if (g.mix && j > 0 && s >= 0) { const p = A[ks[j - 1]]; if (p >= 0 && gender[s] && gender[s] === gender[p] && gender[s] !== 'd') C += 4; }
+      }
+      if (ks.length >= 2 && occ === 1) C += 6;
+    }
+    if (g.front) for (let s = 0; s < N; s++) if (front[s]) { const p = posOf[s]; C += p < 0 ? 30 : rank[deskOf[p]] * 30; }
+    return C;
+  }
+  const apply = k => { if (slotSeat[k] >= 0) A[slotSeat[k]] = arr[k]; };
+  const swap = (p, q) => { const t = arr[p]; arr[p] = arr[q]; arr[q] = t; apply(p); apply(q); };
+
+  let best = null, bestC = Infinity;
+  const iters = L < 2 ? 0 : Math.min(22000, 700 * L);
+  for (let r = 0; r < 4; r++) {
+    for (let k = L - 1; k > 0; k--) { const j = Math.floor(Math.random() * (k + 1)); const t = arr[k]; arr[k] = arr[j]; arr[j] = t; }
+    for (let k = 0; k < L; k++) apply(k);
+    let cur = cost(); if (cur < bestC) { bestC = cur; best = arr.slice(); }
+    let T = 25; const decay = iters ? Math.pow(0.02 / 25, 1 / iters) : 1;
+    for (let it = 0; it < iters; it++) {
+      const p = Math.floor(Math.random() * L), q = Math.floor(Math.random() * L);
+      if (p === q || arr[p] === arr[q]) { T *= decay; continue; }
+      swap(p, q); const nc = cost();
+      if (nc <= cur || Math.random() < Math.exp((cur - nc) / T)) { cur = nc; if (cur < bestC) { bestC = cur; best = arr.slice(); } }
+      else swap(p, q);
+      T *= decay;
+    }
+  }
+  mutate(cc => {
+    for (let k = 0; k < L; k++) {
+      const si = slotSeat[k]; if (si < 0) continue;
+      const s = seats[si]; cc.desks[s.di].a[s.i] = best[k] >= 0 ? cc.students[best[k]].id : null;
+    }
+  });
+  const an = analyze(cls());
+  const nBad = an.status.filter(s => s === 'bad').length, nWarn = an.status.filter(s => s === 'warn').length;
+  const over = Math.max(0, free.length - freeSeats.length);
+  let msg = nBad ? `Sitzplan erstellt. ${nBad} Regel${nBad > 1 ? 'n' : ''} nicht erfüllbar.` : 'Sitzplan erstellt. Alle Regeln erfüllt.';
+  if (!nBad && nWarn) msg += ` ${nWarn}× nur Nachbartisch.`;
+  if (over) msg += ` ${over} Schüler ohne Platz, es fehlen Plätze.`;
+  toast(msg, 4200);
+}
+
+// ---------- rendering ----------
+const measureCtx = document.createElement('canvas').getContext('2d');
+function fitPx(text, maxPx, startPx, minPx) {
+  let px = startPx;
+  while (px > minPx) { measureCtx.font = `500 ${px}px "IBM Plex Sans", sans-serif`; if (measureCtx.measureText(text).width <= maxPx) break; px -= 0.5; }
+  return px;
+}
+function computeScale() {
+  const c = cls(), P = PAGE[c.orientation], st = $('#scroller');
+  const fit = Math.min((st.clientWidth - 56) / P.w, (st.clientHeight - 56) / P.h);
+  scale = Math.max(1, fit) * zoom;
+}
+function renderCanvas() {
+  const c = cls(), P = PAGE[c.orientation], page = $('#page');
+  computeScale();
+  const s = scale;
+  page.style.width = P.w * s + 'px'; page.style.height = P.h * s + 'px';
+  page.style.setProperty('--s', s);
+  page.style.setProperty('--f9', 9 * PT * s + 'px'); page.style.setProperty('--f10', 10 * PT * s + 'px');
+  const names = dispNames(c), an = analyze(c), gmap = new Map(c.students.map(x => [x.id, x.gender]));
+  const hf = 18 * PT * s;
+  let html = `<div class="phead" style="left:${11 * s}px;top:${(13 * s) - hf * 0.95}px;font-size:${hf}px"><span>Klasse: <u>${esc(c.name)}</u></span><span>Fach: <u>${esc(c.subject)}</u></span></div>`;
+  const namePx = 11 * PT * s, maxW = (c.seatW - 3) * s;
+  const R = Math.round, h1 = R(H1 * s), h2 = R(c.midH * s);
+  for (const d of c.desks) {
+    const w = deskW(c, d);
+    const out = d.x < -0.5 || d.y < -0.5 || d.x + w > P.w + 0.5 || d.y + dh(c) > P.h + 0.5;
+    const L = R(d.x * s), T = R(d.y * s), W = R((d.x + w) * s) - L, Hh = R((d.y + dh(c)) * s) - T;
+    html += `<div class="desk ${sel.has(d.id) ? 'sel' : ''} ${out ? 'out' : ''}" data-id="${d.id}" style="left:${L}px;top:${T}px;width:${W + 1}px;height:${Hh + 1}px;--h1:${h1}px;--h2:${h2}px">`;
+    for (let i = 0; i < d.n; i++) {
+      const sid = d.a[i]; let chip = '';
+      const sl = R((d.x + i * c.seatW) * s) - L, sr = R((d.x + (i + 1) * c.seatW) * s) - L;
+      if (sid) {
+        const nm = names.get(sid) || '?', g = gmap.get(sid);
+        const px = fitPx(nm, maxW, namePx, 6 * PT * s);
+        const alignStyle = c.nameAlign === 'left' ? `justify-content:flex-start;padding-left:${R((g ? 5 : 2) * s)}px` : 'justify-content:center';
+        chip = `<div class="chip ${an.bad.has(sid) ? 'bad' : an.warn.has(sid) ? 'warn' : ''}" data-sid="${sid}" style="font-size:${px}px;${alignStyle}">${g ? `<span class="gdot g-${g}"></span>` : ''}${esc(nm)}</div>`;
+      }
+      html += `<div class="seat" data-desk="${d.id}" data-i="${i}" style="left:${sl}px;width:${sr - sl + 1}px"><div class="nm">${chip}<button class="lockbtn ${d.l[i] ? 'on' : ''}" data-desk="${d.id}" data-i="${i}" title="${d.l[i] ? 'Platz ist gesperrt: Generator lässt ihn unverändert' : 'Platz beim Generieren festhalten'}" aria-label="Platz sperren">${LOCK_SVG}</button></div><div class="mid"><span>+</span><span>-</span></div><div class="bot"><span>AM:</span><span>HA:</span></div></div>`;
+    }
+    html += `</div>`;
+  }
+  for (const it of c.items) {
+    const vert = it.h > it.w * 1.6;
+    const fs = Math.min(11 * PT * s, (vert ? it.w : it.h) * s * 0.62);
+    html += `<div class="item k-${it.kind} ${vert ? 'vert' : ''} ${sel.has(it.id) ? 'sel' : ''}" data-id="${it.id}" style="left:${it.x * s}px;top:${it.y * s}px;width:${it.w * s}px;height:${it.h * s}px;font-size:${fs}px"><span>${esc(it.text)}</span><div class="rz" data-id="${it.id}"></div></div>`;
+  }
+  page.innerHTML = html;
+}
+function updateSelClasses() {
+  document.querySelectorAll('#page .desk, #page .item').forEach(el => el.classList.toggle('sel', sel.has(el.dataset.id)));
+}
+function renderTop() {
+  const c = cls();
+  $('#clsSel').innerHTML = S.classes.map(k => `<option value="${k.id}" ${k.id === c.id ? 'selected' : ''}>${esc(k.name || 'Ohne Namen')}${k.subject ? ' (' + esc(k.subject) + ')' : ''}</option>`).join('');
+  if (document.activeElement !== $('#inName')) $('#inName').value = c.name;
+  if (document.activeElement !== $('#inSubj')) $('#inSubj').value = c.subject;
+  const h = H();
+  document.querySelector('[data-tb=undo]').disabled = !h.u.length;
+  document.querySelector('[data-tb=redo]').disabled = !h.r.length;
+}
+function renderCtx() {
+  const c = cls(), el = $('#ctx');
+  if (!sel.size) {
+    el.innerHTML = `Namen aus der Liste auf einen grauen Platz ziehen. Tische frei verschieben, Umschalt+Klick oder Aufziehen für Mehrfachauswahl, Pfeiltasten zum Feinjustieren.`;
+    return;
+  }
+  const desks = c.desks.filter(d => sel.has(d.id)), items = c.items.filter(i => sel.has(i.id));
+  let h = `<strong>${sel.size} ausgewählt</strong>`;
+  if (desks.length) {
+    const n = desks.every(d => d.n === desks[0].n) ? desks[0].n : '';
+    h += ` <label class="row" style="gap:6px">Plätze pro Tisch <select data-ctx="seats">${n === '' ? '<option value="">gemischt</option>' : ''}${[1, 2, 3, 4].map(k => `<option ${k === n ? 'selected' : ''}>${k}</option>`).join('')}</select></label>`;
+    h += ` <button data-ctx="clear">Plätze leeren</button>`;
+  }
+  if (items.length === 1) h += ` <input type="text" data-ctx="text" value="${esc(items[0].text)}" aria-label="Beschriftung" style="width:150px">`;
+  h += ` <button data-ctx="dup">Duplizieren</button> <button data-ctx="del" class="danger">Löschen</button>`;
+  el.innerHTML = h;
+}
+function studentRow(s, an, placed) {
+  const rc = cls().rules.filter(r => r.a === s.id || r.b === s.id).length;
+  return `<div class="srow ${placed ? 'placed' : ''} ${an.bad.has(s.id) ? 'bad' : ''}" data-sid="${s.id}"><span class="grip" aria-hidden="true">⠿</span><span class="gd ${s.gender ? 'g-' + s.gender : ''}"></span><span class="sn">${esc(fullName(s))}</span>${s.front ? '<span class="tag">vorne</span>' : ''}${rc ? `<span class="tag">${rc} Regel${rc > 1 ? 'n' : ''}</span>` : ''}</div>`;
+}
+function renderSide() {
+  const c = cls(), el = $('#sideBody'), an = analyze(c);
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+  if (tab === 'sch') {
+    const un = c.students.filter(s => !an.pos.has(s.id)).sort(byFirst), pl = c.students.filter(s => an.pos.has(s.id)).sort(byFirst);
+    const seatsTotal = c.desks.reduce((a, d) => a + d.n, 0);
+    let h = `<div class="row"><button class="primary" data-act="import">Namen importieren</button><button data-act="addStu">Schüler hinzufügen</button></div>`;
+    if (!c.students.length) {
+      h += `<p class="hint" style="margin-top:14px">Noch keine Schüler. Namen aus einer Liste einfügen, z. B. aus einer Tabelle kopiert.</p>`;
+    } else {
+      h += `<p class="meta">${c.students.length} Schüler, ${pl.length} mit Platz, ${seatsTotal} Plätze im Raum</p>`;
+      h += `<h3 style="margin-top:14px">Ohne Platz (${un.length})</h3>` + (un.length ? un.map(s => studentRow(s, an, false)).join('') : `<p class="hint">Alle Schüler haben einen Platz.</p>`);
+      if (pl.length) h += `<h3>Mit Platz (${pl.length})</h3>` + pl.map(s => studentRow(s, an, true)).join('');
+      h += `<p class="hint" style="margin-top:14px">Klick öffnet Eigenschaften. Namen vom Plan hierher ziehen entfernt sie vom Platz.</p>`;
+    }
+    el.innerHTML = h;
+  } else if (tab === 'reg') {
+    const st = [...c.students].sort(byFirst), N = new Map(c.students.map(s => [s.id, fullName(s)]));
+    const opts = st.map(s => `<option value="${s.id}">${esc(fullName(s))}</option>`).join('');
+    const icon = { ok: '✓', bad: '✗', warn: '!', open: '○' }, tip = { ok: 'erfüllt', bad: 'nicht erfüllt', warn: 'sitzen an benachbarten Tischen', open: 'noch nicht beide platziert' };
+    let h = `<h3>Neue Regel</h3>`;
+    if (st.length < 2) h += `<p class="hint">Für Regeln braucht es mindestens zwei Schüler.</p>`;
+    else h += `<div class="rule-form"><select id="rA">${opts}</select><select id="rT"><option value="with">soll zusammensitzen mit</option><option value="apart">soll nicht zusammensitzen mit</option></select><select id="rB">${opts}</select><button data-act="addRule">Regel hinzufügen</button></div>`;
+    h += `<h3>Regeln (${c.rules.length})</h3>`;
+    h += c.rules.length ? c.rules.map((r, k) => `<div class="rrow st-${an.status[k]}" title="${tip[an.status[k]]}"><span class="st">${icon[an.status[k]]}</span><span class="txt">${esc(N.get(r.a))} <em>${r.t === 'with' ? 'mit' : 'nicht mit'}</em> ${esc(N.get(r.b))}</span><button class="x" data-act="delRule" data-k="${k}" aria-label="Regel löschen">×</button></div>`).join('') : `<p class="hint">Noch keine Regeln.</p>`;
+    h += `<h3>Automatisch verteilen</h3>
+      <label class="chk"><input type="checkbox" data-gen="mix" ${c.gen.mix ? 'checked' : ''}> Jungen und Mädchen am Tisch mischen</label>
+      <label class="chk"><input type="checkbox" data-gen="front" ${c.gen.front ? 'checked' : ''}> „Soll vorne sitzen“ beachten</label>
+      <label class="chk"><input type="checkbox" data-gen="neighbors" ${c.gen.neighbors ? 'checked' : ''}> Getrennte Schüler auch nicht an benachbarte Tische</label>
+      <label class="field" style="margin-top:6px"><span>Vorne ist</span><select data-gen="frontSide"><option value="oben" ${c.gen.frontSide === 'oben' ? 'selected' : ''}>oben auf dem Blatt</option><option value="unten" ${c.gen.frontSide === 'unten' ? 'selected' : ''}>unten auf dem Blatt</option></select></label>
+      <p class="hint">Liegt eine Tafel auf dem Plan, gilt ihre Position als vorne. Gesperrte Plätze (Schloss) bleiben beim Verteilen unverändert.</p>
+      <div class="row" style="margin-top:8px"><button class="primary" data-act="generate">Sitzplan generieren</button><button data-act="clearAll">Plätze leeren</button></div>`;
+    el.innerHTML = h;
+    if (st.length >= 2) $('#rB').selectedIndex = 1;
+  } else {
+    const g = c.grid;
+    el.innerHTML = `<h3>Angaben auf dem Blatt</h3>
+      <div class="grid2"><label class="field"><span>Klasse</span><input type="text" data-cls="name" value="${esc(c.name)}"></label>
+      <label class="field"><span>Fach</span><input type="text" data-cls="subject" value="${esc(c.subject)}"></label></div>
+      <div class="field"><span>Ausrichtung</span><div class="seg"><button data-act="ori" data-v="quer" aria-pressed="${c.orientation === 'quer'}">Querformat</button><button data-act="ori" data-v="hoch" aria-pressed="${c.orientation === 'hoch'}">Hochformat</button></div></div>
+      <div class="grid2"><label class="field"><span>Breite eines Platzes (mm)</span><input type="number" min="20" max="70" step="1" data-cls="seatW" value="${c.seatW}"></label>
+      <label class="field"><span>Höhe der mittleren Zeile (mm)</span><input type="number" min="5" max="60" step="0.5" data-cls="midH" value="${c.midH}"></label>
+      <label class="field"><span>Namen auf dem Plan</span><select data-cls="nameFormat">
+        <option value="v" ${c.nameFormat === 'v' ? 'selected' : ''}>Vorname</option>
+        <option value="vn" ${c.nameFormat === 'vn' ? 'selected' : ''}>Vorname N.</option>
+        <option value="vnn" ${c.nameFormat === 'vnn' ? 'selected' : ''}>Vorname Nachname</option>
+        <option value="nv" ${c.nameFormat === 'nv' ? 'selected' : ''}>Nachname, Vorname</option></select></label>
+      <label class="field"><span>Namen ausrichten</span><select data-cls="nameAlign">
+        <option value="center" ${c.nameAlign === 'center' ? 'selected' : ''}>Mittig</option>
+        <option value="left" ${c.nameAlign === 'left' ? 'selected' : ''}>Linksbündig</option></select></label></div>
+      <h3>Tischraster erzeugen</h3>
+      <div class="grid3"><label class="field"><span>Reihen</span><input type="number" min="1" max="10" id="gRows" value="${g.rows}"></label>
+      <label class="field"><span>Tische je Reihe</span><input type="number" min="1" max="8" id="gCols" value="${g.cols}"></label>
+      <label class="field"><span>Plätze je Tisch</span><input type="number" min="1" max="4" id="gN" value="${g.n}"></label></div>
+      <button data-act="grid">Raster erzeugen</button>
+      <p class="hint">Ersetzt alle Tische. Schüler verlieren dabei ihren Platz, Raumelemente bleiben.</p>
+      <h3>Klasse verwalten</h3>
+      <div class="row"><button data-act="dupCls">Klasse duplizieren</button><button class="danger" data-act="delCls">Klasse löschen</button></div>
+      <p class="hint">Duplizieren übernimmt Schüler, Regeln und Plan, z. B. für ein zweites Fach in derselben Klasse.</p>
+      <h3>Sicherung</h3>
+      <div class="row"><button data-act="backup">Alle Klassen sichern (.json)</button><button data-act="restore">Sicherung laden</button></div>
+      <input type="file" id="restoreFile" accept=".json,application/json" hidden>`;
+  }
+}
+function renderAll() { renderTop(); renderSide(); renderCanvas(); renderCtx(); setStatus(); }
+
+// ---------- student dialog ----------
+let stuId = null;
+function openStudent(id) { stuId = id; renderStudentDlg(); const d = $('#dlgStudent'); if (!d.open) d.showModal(); }
+function renderStudentDlg() {
+  const c = cls(), s = c.students.find(x => x.id === stuId);
+  if (!s) { $('#dlgStudent').close(); return; }
+  const N = new Map(c.students.map(x => [x.id, fullName(x)]));
+  const rel = t => c.rules.map((r, k) => ({ r, k })).filter(({ r }) => r.t === t && (r.a === s.id || r.b === s.id));
+  const others = [...c.students].filter(x => x.id !== s.id).sort(byFirst);
+  const chipList = t => rel(t).map(({ r, k }) => `<span class="pchip ${t}">${esc(N.get(r.a === s.id ? r.b : r.a))}<button class="x" data-sact="delRule" data-k="${k}" aria-label="Entfernen">×</button></span>`).join('') || '<span class="hint" style="margin:0">keine</span>';
+  const sel = t => `<select data-sact="addRule" data-t="${t}"><option value="">Schüler hinzufügen …</option>${others.map(o => `<option value="${o.id}">${esc(fullName(o))}</option>`).join('')}</select>`;
+  const gb = (v, l) => `<button type="button" data-sact="gender" data-v="${v}" aria-pressed="${(s.gender || '') === v}">${l}</button>`;
+  $('#stuBody').innerHTML = `<h2>${esc(fullName(s))}</h2>
+    <div class="grid2"><label class="field"><span>Vorname</span><input type="text" data-sf="first" value="${esc(s.first)}"></label>
+    <label class="field"><span>Nachname</span><input type="text" data-sf="last" value="${esc(s.last)}"></label></div>
+    <div class="field"><span>Geschlecht</span><div class="seg">${gb('m', 'männlich')}${gb('w', 'weiblich')}${gb('', 'keine Angabe')}</div></div>
+    <label class="chk"><input type="checkbox" data-sf="front" ${s.front ? 'checked' : ''}> Soll vorne sitzen</label>
+    <label class="field"><span>Notiz (erscheint nicht im Export)</span><textarea data-sf="note" rows="2">${esc(s.note || '')}</textarea></label>
+    <h3>Soll zusammensitzen mit</h3><div class="chips">${chipList('with')}</div>${sel('with')}
+    <h3>Soll nicht zusammensitzen mit</h3><div class="chips">${chipList('apart')}</div>${sel('apart')}
+    <footer><button class="danger left" data-sact="delStu">Schüler löschen</button><button class="primary" data-sact="close">Fertig</button></footer>`;
+}
+$('#dlgStudent').addEventListener('change', e => {
+  const f = e.target.dataset.sf, c0 = cls(), s0 = c0.students.find(x => x.id === stuId); if (!s0) return;
+  if (f) {
+    const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value.trim();
+    mutate(c => { const s = c.students.find(x => x.id === stuId); s[f] = v; });
+    if (f === 'first' || f === 'last') renderStudentDlg();
+  } else if (e.target.dataset.sact === 'addRule' && e.target.value) {
+    const b = e.target.value, t = e.target.dataset.t;
+    mutate(c => {
+      c.rules = c.rules.filter(r => !((r.a === stuId && r.b === b) || (r.a === b && r.b === stuId)));
+      c.rules.push({ a: stuId, b, t });
+    });
+    renderStudentDlg();
+  }
+});
+$('#dlgStudent').addEventListener('click', async e => {
+  const b = e.target.closest('[data-sact]'); if (!b || b.tagName === 'SELECT') return;
+  const act = b.dataset.sact;
+  if (act === 'close') $('#dlgStudent').close();
+  else if (act === 'gender') { mutate(c => { c.students.find(x => x.id === stuId).gender = b.dataset.v; }); renderStudentDlg(); }
+  else if (act === 'delRule') { const k = +b.dataset.k; mutate(c => { c.rules.splice(k, 1); }); renderStudentDlg(); }
+  else if (act === 'delStu') {
+    const s = cls().students.find(x => x.id === stuId);
+    $('#dlgStudent').close();
+    if (await askConfirm('Schüler löschen?', `${fullName(s)} wird mit allen Regeln aus dieser Klasse entfernt.`, 'Löschen')) {
+      const id = stuId;
+      mutate(c => { c.students = c.students.filter(x => x.id !== id); c.rules = c.rules.filter(r => r.a !== id && r.b !== id); c.desks.forEach(d => d.a = d.a.map(v => v === id ? null : v)); });
+    }
+  }
+});
+
+// ---------- import ----------
+const G_RE = /^(m|w|f|männlich|maennlich|weiblich|junge|mädchen|maedchen|male|female)$/i;
+function normG(t) { t = t.toLowerCase(); if (/^(m|männlich|maennlich|junge|male)$/.test(t)) return 'm'; if (/^(w|f|weiblich|mädchen|maedchen|female)$/.test(t)) return 'w'; return ''; }
+function parseNames(text, order) {
+  const out = [];
+  text.split(/\r?\n/).forEach((line, idx) => {
+    line = line.trim(); if (!line) return;
+    let parts = line.split(/\t|;/).map(p => p.trim()).filter(p => p !== '');
+    if (!parts.length) return;
+    if (idx === 0 && /name/i.test(line) && !/,/.test(parts[0])) return; // header
+    let gender = '';
+    const gi = parts.findIndex((p, k) => k > 0 && G_RE.test(p));
+    if (gi > 0) { gender = normG(parts[gi]); parts.splice(gi, 1); }
+    let first = '', last = '';
+    if (parts.length >= 2) { if (order === 'nv') { last = parts[0]; first = parts[1]; } else { first = parts[0]; last = parts[1]; } }
+    else {
+      const p = parts[0];
+      if (p.includes(',')) { const [l, f] = p.split(',').map(x => x.trim()); last = l; first = f || ''; }
+      else {
+        const w = p.split(/\s+/);
+        if (w.length === 1) first = w[0];
+        else if (order === 'nv') { last = w[0]; first = w.slice(1).join(' '); }
+        else { last = w[w.length - 1]; first = w.slice(0, -1).join(' '); }
+      }
+    }
+    if (first || last) out.push({ first, last, gender });
+  });
+  return out;
+}
+function updImpPreview() { const n = parseNames($('#impText').value, $('#impOrder').value).length; $('#impPreview').textContent = `${n} Name${n === 1 ? '' : 'n'} erkannt`; }
+$('#impText').addEventListener('input', updImpPreview);
+$('#impOrder').addEventListener('change', updImpPreview);
+$('#impFile').addEventListener('change', async e => { const f = e.target.files[0]; if (!f) return; let t = await f.text(); $('#impText').value = t; updImpPreview(); });
+$('#impGo').addEventListener('click', () => {
+  const list = parseNames($('#impText').value, $('#impOrder').value);
+  if (!list.length) { toast('Keine Namen erkannt.'); return; }
+  const replace = $('#impReplace').checked;
+  mutate(c => {
+    if (replace) { c.students = []; c.rules = []; c.desks.forEach(d => { d.a = d.a.map(() => null); }); }
+    list.forEach(p => c.students.push({ id: 's' + rid(), first: p.first, last: p.last, gender: p.gender, front: false, note: '' }));
+  });
+  $('#dlgImport').close(); $('#impText').value = ''; $('#impFile').value = ''; updImpPreview();
+  toast(`${list.length} Schüler importiert.`);
+});
+
+// ---------- side events ----------
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; renderSide(); } });
+$('#sideBody').addEventListener('click', async e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act, c = cls();
+  if (act === 'import') { updImpPreview(); $('#dlgImport').showModal(); }
+  else if (act === 'addStu') { let id; mutate(cc => { id = 's' + rid(); cc.students.push({ id, first: 'Neu', last: '', gender: '', front: false, note: '' }); }); openStudent(id); setTimeout(() => { const i = document.querySelector('[data-sf=first]'); i && i.select(); }, 30); }
+  else if (act === 'addRule') {
+    const a = $('#rA').value, bb = $('#rB').value, t = $('#rT').value;
+    if (a === bb) { toast('Bitte zwei verschiedene Schüler wählen.'); return; }
+    mutate(cc => { cc.rules = cc.rules.filter(r => !((r.a === a && r.b === bb) || (r.a === bb && r.b === a))); cc.rules.push({ a, b: bb, t }); });
+  }
+  else if (act === 'delRule') { const k = +b.dataset.k; mutate(cc => cc.rules.splice(k, 1)); }
+  else if (act === 'generate') generate();
+  else if (act === 'clearAll') mutate(cc => cc.desks.forEach(d => { d.a = d.a.map((v, i) => d.l[i] ? v : null); }));
+  else if (act === 'ori') changeOrientation(b.dataset.v);
+  else if (act === 'grid') {
+    const rows = clamp(+$('#gRows').value || 1, 1, 10), cols = clamp(+$('#gCols').value || 1, 1, 8), n = clamp(+$('#gN').value || 2, 1, 4);
+    if (c.desks.some(d => d.a.some(Boolean)) && !(await askConfirm('Raster erzeugen?', 'Alle Tische werden ersetzt und die Schüler verlieren ihren Platz.', 'Raster erzeugen'))) return;
+    mutate(cc => { cc.grid = { rows, cols, n }; makeGrid(cc, rows, cols, n); sel.clear(); });
+  }
+  else if (act === 'dupCls') {
+    const nc = normalize(JSON.parse(JSON.stringify(c))); nc.id = 'k' + rid(); nc.subject = nc.subject ? nc.subject + ' (Kopie)' : 'Kopie';
+    S.classes.push(nc); S.cur = nc.id; sel.clear(); markDirty(nc); renderAll(); toast('Klasse dupliziert.');
+  }
+  else if (act === 'delCls') {
+    if (!(await askConfirm('Klasse löschen?', `„${c.name}${c.subject ? ' / ' + c.subject : ''}“ mit allen Schülern und dem Sitzplan wird gelöscht.`, 'Löschen'))) return;
+    S.classes = S.classes.filter(x => x.id !== c.id); dirty.add(c.id);
+    if (!S.classes.length) { const n = newClass('Neue Klasse'); makeGrid(n, 4, 3, 2); S.classes.push(n); dirty.add(n.id); }
+    S.cur = S.classes[0].id; sel.clear(); saveLocal(); clearTimeout(saveT); saveT = setTimeout(flush, 300); renderAll();
+  }
+  else if (act === 'backup') saveFile(`Sitzplaene_Sicherung_${new Date().toISOString().slice(0, 10)}.json`, new Blob([JSON.stringify({ app: 'sitzplan', version: 1, classes: S.classes }, null, 1)], { type: 'application/json' }));
+  else if (act === 'restore') $('#restoreFile').click();
+});
+$('#sideBody').addEventListener('change', async e => {
+  const t = e.target;
+  if (t.id === 'restoreFile') {
+    const f = t.files[0]; if (!f) return;
+    try {
+      const j = JSON.parse(await f.text()); const list = (j.classes || []).map(normalize);
+      if (!list.length) throw new Error('leer');
+      const ids = new Set(S.classes.map(c => c.id));
+      list.forEach(c => { if (ids.has(c.id)) c.id = 'k' + rid(); S.classes.push(c); markDirty(c); });
+      S.cur = list[0].id; renderAll(); toast(`${list.length} Klasse${list.length > 1 ? 'n' : ''} geladen.`);
+    } catch (err) { toast('Die Datei ist keine gültige Sitzplan-Sicherung.'); }
+    return;
+  }
+  if (t.dataset.gen) { const k = t.dataset.gen, v = t.type === 'checkbox' ? t.checked : t.value; mutate(c => { c.gen[k] = v; }); }
+  if (t.dataset.cls) {
+    const k = t.dataset.cls; let v = t.value;
+    if (k === 'seatW') v = clamp(+v || 40, 20, 70);
+    if (k === 'midH') v = clamp(+v || MID_DEFAULT, 5, 60);
+    mutate(c => { c[k] = v; });
+  }
+});
+$('#side').addEventListener('pointerdown', e => {
+  const row = e.target.closest('.srow'); if (!row || e.button !== 0) return;
+  if (e.pointerType === 'touch' && !e.target.closest('.grip')) {
+    // touch: tap opens, drag only via grip
+    const id = row.dataset.sid, sx = e.clientX, sy = e.clientY;
+    const up = ev => { window.removeEventListener('pointerup', up); if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) openStudent(id); };
+    window.addEventListener('pointerup', up); return;
+  }
+  e.preventDefault(); startStudentDrag(e, row.dataset.sid);
+});
+
+// ---------- top events ----------
+$('#clsSel').addEventListener('change', e => { S.cur = e.target.value; sel.clear(); zoom = 1; saveLocal(); renderAll(); });
+$('#btnNewCls').addEventListener('click', () => { const c = newClass('Neue Klasse'); makeGrid(c, 4, 3, 2); S.classes.push(c); S.cur = c.id; sel.clear(); markDirty(c); tab = 'kla'; renderAll(); setTimeout(() => { const i = document.querySelector('[data-cls=name]'); i && i.select(); }, 30); });
+$('#inName').addEventListener('change', e => mutate(c => { c.name = e.target.value.trim(); }));
+$('#inSubj').addEventListener('change', e => mutate(c => { c.subject = e.target.value.trim(); }));
+$('#btnExport').addEventListener('click', () => $('#dlgExport').showModal());
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+// ---------- toolbar ----------
+document.querySelector('.toolbar').addEventListener('click', e => {
+  const b = e.target.closest('[data-tb]'); if (!b) return;
+  const a = b.dataset.tb;
+  if (a === 'desk2') addDesk(2); else if (a === 'desk1') addDesk(1);
+  else if (a === 'undo') undo(); else if (a === 'redo') redo();
+  else if (a === 'zin') { zoom = Math.min(4, zoom * 1.2); renderCanvas(); }
+  else if (a === 'zout') { zoom = Math.max(0.4, zoom / 1.2); renderCanvas(); }
+  else if (a === 'zfit') { zoom = 1; renderCanvas(); }
+});
+$('#addItem').addEventListener('change', e => { if (e.target.value) addItem(e.target.value); e.target.value = ''; });
+$('#ctx').addEventListener('click', e => {
+  const b = e.target.closest('[data-ctx]'); if (!b || b.tagName !== 'BUTTON') return;
+  const a = b.dataset.ctx;
+  if (a === 'del') deleteSel(); else if (a === 'dup') duplicateSel();
+  else if (a === 'clear') mutate(c => c.desks.filter(d => sel.has(d.id)).forEach(d => { d.a = d.a.map(() => null); d.l = d.l.map(() => false); }));
+});
+$('#ctx').addEventListener('change', e => {
+  const a = e.target.dataset.ctx;
+  if (a === 'seats' && e.target.value) { const n = +e.target.value; mutate(c => c.desks.filter(d => sel.has(d.id)).forEach(d => setSeatCount(d, n))); }
+  if (a === 'text') { const v = e.target.value; mutate(c => c.items.filter(i => sel.has(i.id)).forEach(i => i.text = v)); }
+});
+
+// ---------- canvas interaction ----------
+const page = $('#page');
+function pagePt(ev) { const r = page.getBoundingClientRect(); return { x: (ev.clientX - r.left) / scale, y: (ev.clientY - r.top) / scale }; }
+function track(onMove, onUp) {
+  const mv = ev => onMove(ev), up = ev => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); onUp(ev); };
+  window.addEventListener('pointermove', mv); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+}
+const snapOn = ev => $('#snap').checked && !ev.altKey;
+
+page.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  const lock = e.target.closest('.lockbtn');
+  if (lock) { e.preventDefault(); const { desk, i } = lock.dataset; mutate(c => { const d = c.desks.find(x => x.id === desk); d.l[+i] = !d.l[+i]; }); return; }
+  const chip = e.target.closest('.chip');
+  if (chip) { e.preventDefault(); startStudentDrag(e, chip.dataset.sid); return; }
+  const rz = e.target.closest('.rz');
+  if (rz) { e.preventDefault(); startResize(e, rz.dataset.id); return; }
+  const el = e.target.closest('.desk,.item');
+  if (el) {
+    e.preventDefault();
+    const id = el.dataset.id;
+    if (e.shiftKey) { sel.has(id) ? sel.delete(id) : sel.add(id); updateSelClasses(); renderCtx(); if (!sel.has(id)) return; }
+    else if (!sel.has(id)) { sel = new Set([id]); updateSelClasses(); renderCtx(); }
+    startMove(e); return;
+  }
+  startBand(e);
+});
+function startMove(e) {
+  const c = cls(), orig = [...sel].map(id => { const o = findObj(c, id); return o ? { id, x: o.x, y: o.y, el: page.querySelector(`[data-id="${id}"]`) } : null; }).filter(Boolean);
+  const sx = e.clientX, sy = e.clientY; let moved = false, dx = 0, dy = 0;
+  track(ev => {
+    if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 3) return;
+    moved = true;
+    dx = (ev.clientX - sx) / scale; dy = (ev.clientY - sy) / scale;
+    if (snapOn(ev)) { dx = Math.round(dx / GRID) * GRID; dy = Math.round(dy / GRID) * GRID; }
+    orig.forEach(o => { if (o.el) { o.el.style.left = (o.x + dx) * scale + 'px'; o.el.style.top = (o.y + dy) * scale + 'px'; } });
+  }, () => {
+    if (!moved || (!dx && !dy)) return;
+    mutate(cc => orig.forEach(o => { const ob = findObj(cc, o.id); ob.x = r1(o.x + dx); ob.y = r1(o.y + dy); }));
+  });
+}
+function startResize(e, id) {
+  const c = cls(), it = c.items.find(i => i.id === id), el = page.querySelector(`.item[data-id="${id}"]`);
+  const sx = e.clientX, sy = e.clientY, w0 = it.w, h0 = it.h; let w = w0, h = h0;
+  track(ev => {
+    w = Math.max(4, w0 + (ev.clientX - sx) / scale); h = Math.max(4, h0 + (ev.clientY - sy) / scale);
+    if (snapOn(ev)) { w = Math.max(GRID, Math.round(w / GRID) * GRID); h = Math.max(GRID, Math.round(h / GRID) * GRID); }
+    el.style.width = w * scale + 'px'; el.style.height = h * scale + 'px';
+  }, () => { if (w !== w0 || h !== h0) mutate(cc => { const o = cc.items.find(i => i.id === id); o.w = r1(w); o.h = r1(h); }); });
+}
+function startBand(e) {
+  const p0 = pagePt(e); let band = null, p1 = p0;
+  const add = e.shiftKey;
+  track(ev => {
+    p1 = pagePt(ev);
+    if (!band) { if (Math.hypot(p1.x - p0.x, p1.y - p0.y) * scale < 4) return; band = document.createElement('div'); band.className = 'band'; page.appendChild(band); }
+    const x = Math.min(p0.x, p1.x), y = Math.min(p0.y, p1.y);
+    Object.assign(band.style, { left: x * scale + 'px', top: y * scale + 'px', width: Math.abs(p1.x - p0.x) * scale + 'px', height: Math.abs(p1.y - p0.y) * scale + 'px' });
+  }, () => {
+    if (!band) { if (!add && sel.size) { sel.clear(); updateSelClasses(); renderCtx(); } return; }
+    band.remove();
+    const c = cls(), x0 = Math.min(p0.x, p1.x), y0 = Math.min(p0.y, p1.y), x1 = Math.max(p0.x, p1.x), y1 = Math.max(p0.y, p1.y);
+    if (!add) sel = new Set();
+    const hit = (x, y, w, h) => x < x1 && x + w > x0 && y < y1 && y + h > y0;
+    c.desks.forEach(d => { if (hit(d.x, d.y, deskW(c, d), dh(c))) sel.add(d.id); });
+    c.items.forEach(i => { if (hit(i.x, i.y, i.w, i.h)) sel.add(i.id); });
+    updateSelClasses(); renderCtx();
+  });
+}
+function startStudentDrag(e, sid) {
+  const c = cls(), s = c.students.find(x => x.id === sid); if (!s) return;
+  const name = dispNames(c).get(sid);
+  const sx = e.clientX, sy = e.clientY; let ghost = null, overSeat = null, overSide = false;
+  const side = $('#side'), fromSeat = !!seatOf(c, sid);
+  track(ev => {
+    if (!ghost) {
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+      ghost = document.createElement('div'); ghost.className = 'ghost'; ghost.textContent = name; document.body.appendChild(ghost);
+    }
+    ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px';
+    const t = document.elementFromPoint(ev.clientX, ev.clientY);
+    const seat = t && t.closest('#page .seat');
+    if (seat !== overSeat) { overSeat && overSeat.classList.remove('drop'); overSeat = seat; seat && seat.classList.add('drop'); }
+    overSide = !!(t && t.closest('#side')) && fromSeat;
+    side.classList.toggle('dropzone', overSide);
+  }, () => {
+    side.classList.remove('dropzone');
+    if (!ghost) { openStudent(sid); return; }
+    ghost.remove(); overSeat && overSeat.classList.remove('drop');
+    if (overSeat) assign(sid, overSeat.dataset.desk, +overSeat.dataset.i);
+    else if (overSide) unassign(sid);
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,select,dialog')) return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key;
+  if (mod && k.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && k.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+  else if (mod && k.toLowerCase() === 'd') { e.preventDefault(); duplicateSel(); }
+  else if ((k === 'Delete' || k === 'Backspace') && sel.size) { e.preventDefault(); deleteSel(); }
+  else if (k === 'Escape' && sel.size) { sel.clear(); updateSelClasses(); renderCtx(); }
+  else if (k.startsWith('Arrow') && sel.size) {
+    e.preventDefault(); const st = e.shiftKey ? 5 : 1;
+    const dx = k === 'ArrowLeft' ? -st : k === 'ArrowRight' ? st : 0, dy = k === 'ArrowUp' ? -st : k === 'ArrowDown' ? st : 0;
+    mutate(c => [...sel].forEach(id => { const o = findObj(c, id); if (o) { o.x = r1(o.x + dx); o.y = r1(o.y + dy); } }));
+  }
+});
+let rsT; window.addEventListener('resize', () => { clearTimeout(rsT); rsT = setTimeout(renderCanvas, 80); });
+
+// ---------- export ----------
+async function saveFile(filename, blob) {
+  const dl = await getCap('downloads');
+  if (dl) {
+    try { await dl.save({ filename, data: blob }); }
+    catch (err) { if (err && err.code === 'declined') return; if (err && err.code === 'rate_limited') { toast('Bitte kurz warten und erneut versuchen.'); return; } toast('Download nicht möglich: ' + (err && err.message || 'unbekannter Fehler')); }
+    return;
+  }
+  try { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+  catch (err) { toast('Download ist in dieser Ansicht nicht verfügbar.'); }
+}
+function drawPage(doc, c, opt) {
+  const sw = c.seatW, names = dispNames(c);
+  doc.setDrawColor(0); doc.setLineWidth(0.25); doc.setTextColor(0);
+  // header
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(18);
+  let x = 11; const y = 13;
+  const field = (label, val) => {
+    doc.text(label, x, y); x += doc.getTextWidth(label) + 1.5;
+    const w = Math.max(24, (val ? doc.getTextWidth(val) : 0) + 4);
+    if (val) doc.text(val, x + 1, y);
+    doc.setLineWidth(0.3); doc.line(x, y + 1.2, x + w, y + 1.2); doc.setLineWidth(0.25);
+    x += w + 7;
+  };
+  field('Klasse:', c.name); if (!opt.namesOnly) field('Fach:', c.subject);
+  const H2 = c.midH, DHc = dh(c);
+  if (opt.namesOnly) {
+    doc.setLineWidth(0.3); doc.setDrawColor(0);
+    doc.setFont('helvetica', 'bold');
+    let pt = Math.min(40, (DHc - 3) * 0.62 / PT);
+    const allNames = [];
+    for (const d of c.desks) for (const sid of d.a) if (sid && names.has(sid)) allNames.push(names.get(sid));
+    while (pt > 6) { doc.setFontSize(pt); if (allNames.every(t => doc.getTextWidth(t) <= sw - 4)) break; pt -= 0.5; }
+    for (const d of c.desks) {
+      const W = d.n * sw;
+      doc.rect(d.x, d.y, W, DHc);
+      for (let i = 0; i < d.n; i++) {
+        const X = d.x + i * sw, Y = d.y;
+        if (i) doc.line(X, Y, X, Y + DHc);
+        const sid = d.a[i];
+        if (sid && names.has(sid)) {
+          const t = names.get(sid);
+          const cy = Y + DHc / 2 + pt * PT * 0.35;
+          if (c.nameAlign === 'left') doc.text(t, X + 2, cy, { align: 'left' });
+          else doc.text(t, X + sw / 2, cy, { align: 'center' });
+        }
+      }
+    }
+    doc.setFont('helvetica', 'normal');
+  } else {
+    doc.setFillColor(235, 235, 235);
+    for (const d of c.desks) doc.rect(d.x, d.y, d.n * sw, H1, 'F');
+    doc.setLineWidth(0.25); doc.setDrawColor(0);
+    for (const d of c.desks) {
+      const W = d.n * sw;
+      doc.rect(d.x, d.y, W, DHc);
+      doc.line(d.x, d.y + H1, d.x + W, d.y + H1); doc.line(d.x, d.y + H1 + H2, d.x + W, d.y + H1 + H2);
+      for (let i = 0; i < d.n; i++) {
+        const X = d.x + i * sw, Y = d.y;
+        if (i) doc.line(X, Y, X, Y + DHc);
+        doc.line(X + sw / 2, Y + H1, X + sw / 2, Y + DHc);
+        doc.setFontSize(9); doc.text('+', X + 1.8, Y + H1 + H2 / 2 + 1.1); doc.text('-', X + sw / 2 + 1.8, Y + H1 + H2 / 2 + 1.1);
+        doc.setFontSize(10); doc.text('AM:', X + 1.8, Y + H1 + H2 + H3 / 2 + 1.25); doc.text('HA:', X + sw / 2 + 1.8, Y + H1 + H2 + H3 / 2 + 1.25);
+        const sid = d.a[i];
+        if (opt.names && sid && names.has(sid)) {
+          const t = names.get(sid); let pt = 11;
+          doc.setFont('helvetica', 'bold');
+          while (pt > 6) { doc.setFontSize(pt); if (doc.getTextWidth(t) <= sw - 3) break; pt -= 0.5; }
+          if (c.nameAlign === 'left') doc.text(t, X + 2, Y + H1 / 2 + pt * PT * 0.35, { align: 'left' });
+          else doc.text(t, X + sw / 2, Y + H1 / 2 + pt * PT * 0.35, { align: 'center' });
+          doc.setFont('helvetica', 'normal');
+        }
+      }
+    }
+  }
+  if (opt.items) for (const it of c.items) {
+    const vert = it.h > it.w * 1.6;
+    if (it.kind !== 'text') { doc.setDrawColor(90); doc.setFillColor(it.kind === 'fenster' ? 234 : 243, it.kind === 'fenster' ? 242 : 243, it.kind === 'fenster' ? 246 : 243); doc.rect(it.x, it.y, it.w, it.h, 'FD'); doc.setDrawColor(0); }
+    let fs = Math.min(11, (vert ? it.w : it.h) * 0.62 / PT);
+    doc.setFontSize(fs); doc.setTextColor(it.kind === 'text' ? 20 : 70);
+    const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+    if (vert) doc.text(it.text, cx + fs * PT * 0.35, cy, { align: 'center', angle: 90 });
+    else doc.text(it.text, cx, cy + fs * PT * 0.35, { align: 'center' });
+    doc.setTextColor(0);
+  }
+}
+$('#exNamesOnly').addEventListener('change', e => {
+  $('#exNames').disabled = e.target.checked;
+  if (e.target.checked) $('#exNames').checked = true;
+});
+$('#exGo').addEventListener('click', async () => {
+  if (!window.jspdf) { toast('PDF-Bibliothek nicht geladen. Seite neu laden und erneut versuchen.'); return; }
+  const namesOnly = $('#exNamesOnly').checked;
+  const opt = { names: $('#exNames').checked, items: $('#exItems').checked, namesOnly };
+  const list = $('#exAll').checked ? S.classes : [cls()];
+  const { jsPDF } = window.jspdf;
+  const o0 = list[0].orientation === 'quer' ? 'landscape' : 'portrait';
+  const doc = new jsPDF({ orientation: o0, unit: 'mm', format: 'a4' });
+  list.forEach((c, k) => { if (k) doc.addPage('a4', c.orientation === 'quer' ? 'landscape' : 'portrait'); drawPage(doc, c, opt); });
+  const c = list[0];
+  const base = (list.length > 1 ? 'Sitzplaene_alle' : ['Sitzplan', c.name, c.subject].filter(Boolean).join('_')) + (namesOnly ? '_Namen' : '');
+  $('#dlgExport').close();
+  await saveFile(base.replace(/[^\wäöüÄÖÜß-]+/g, '_') + '.pdf', doc.output('blob'));
+});
+
+// ---------- boot ----------
+loadLocal();
+renderAll();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderCanvas);
+connectRemote();
+})();
+</script>
+</body>
+</html>
