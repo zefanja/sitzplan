@@ -118,6 +118,8 @@ main{display:grid;grid-template-columns:320px 1fr;min-height:0}
 .mid span,.bot span{display:flex;align-items:center;padding-left:calc(var(--s) * 1.8px)}
 .mid span+span,.bot span+span{border-left:1px solid #222}
 .seat.drop .nm{background:#BFDCCF}
+.seat.big{grid-template-rows:1fr}
+.seat.big .nm{border-bottom:0}
 .chip{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:500;cursor:grab;white-space:nowrap;overflow:hidden;touch-action:none;color:#111}
 .chip .gdot{position:absolute;left:3px;top:3px;width:6px;height:6px;border-radius:50%}
 .chip.bad{box-shadow:inset 0 0 0 2px var(--danger);color:#8E2B18}
@@ -171,6 +173,10 @@ dialog::backdrop{background:rgba(20,28,32,.45)}
   <label class="inl">Klasse <input type="text" id="inName"></label>
   <label class="inl">Fach <input type="text" id="inSubj"></label>
   <span class="spacer"></span>
+  <div class="seg" role="group" aria-label="Ansicht" id="viewToggle">
+    <button type="button" data-view="teacher" aria-pressed="true">Lehrersicht</button>
+    <button type="button" data-view="student" aria-pressed="false">Schülersicht</button>
+  </div>
   <span id="status">Lädt …</span>
   <button class="primary" id="btnExport">PDF exportieren</button>
 </header>
@@ -231,7 +237,8 @@ dialog::backdrop{background:rgba(20,28,32,.45)}
   <label class="chk"><input type="checkbox" id="exNames" checked> Namen in die grauen Felder eintragen</label>
   <label class="chk"><input type="checkbox" id="exItems" checked> Raumelemente mitdrucken (Tafel, Lehrertisch, Tür …)</label>
   <label class="chk"><input type="checkbox" id="exAll"> Alle Klassen in eine Datei (eine Seite pro Klasse)</label>
-  <label class="chk"><input type="checkbox" id="exNamesOnly"> Nur Namen groß drucken, ohne Notizfelder (Vorlage für den Lehrertisch)</label>
+  <label class="chk"><input type="checkbox" id="exNamesOnly"> Nur Namen groß drucken, ohne Notizfelder (z. B. zum Aushängen)</label>
+  <p class="hint" style="margin:0 0 0 26px">Ausrichtung (Lehrer-/Schülersicht) folgt dem Umschalter oben rechts.</p>
   <footer><button data-close>Abbrechen</button><button class="primary" id="exGo">PDF herunterladen</button></footer>
 </div></dialog>
 
@@ -290,6 +297,7 @@ function askConfirm(title, text, yes = 'OK') {
 let S = { classes: [], cur: null };
 let sel = new Set();
 let tab = 'sch';
+let viewMode = 'teacher'; // 'teacher' | 'student'
 let zoom = 1, scale = 3;
 const hist = {}; // classId -> {u:[], r:[]}
 
@@ -602,6 +610,11 @@ function fitPx(text, maxPx, startPx, minPx) {
   while (px > minPx) { measureCtx.font = `500 ${px}px "IBM Plex Sans", sans-serif`; if (measureCtx.measureText(text).width <= maxPx) break; px -= 0.5; }
   return px;
 }
+function fitPxAll(texts, maxPx, startPx, minPx) {
+  let px = startPx;
+  while (px > minPx) { measureCtx.font = `500 ${px}px "IBM Plex Sans", sans-serif`; if (texts.every(t => measureCtx.measureText(t).width <= maxPx)) break; px -= 0.5; }
+  return px;
+}
 function computeScale() {
   const c = cls(), P = PAGE[c.orientation], st = $('#scroller');
   const fit = Math.min((st.clientWidth - 56) / P.w, (st.clientHeight - 56) / P.h);
@@ -615,32 +628,53 @@ function renderCanvas() {
   page.style.setProperty('--s', s);
   page.style.setProperty('--f9', 9 * PT * s + 'px'); page.style.setProperty('--f10', 10 * PT * s + 'px');
   const names = dispNames(c), an = analyze(c), gmap = new Map(c.students.map(x => [x.id, x.gender]));
+  const teacher = viewMode !== 'student';
   const hf = 18 * PT * s;
-  let html = `<div class="phead" style="left:${11 * s}px;top:${(13 * s) - hf * 0.95}px;font-size:${hf}px"><span>Klasse: <u>${esc(c.name)}</u></span><span>Fach: <u>${esc(c.subject)}</u></span></div>`;
+  const pheadY = teacher ? 13 : P.h - 13;
+  let html = `<div class="phead" style="left:${11 * s}px;top:${(pheadY * s) - hf * 0.95}px;font-size:${hf}px"><span>Klasse: <u>${esc(c.name)}</u></span><span>Fach: <u>${esc(c.subject)}</u></span></div>`;
   const namePx = 11 * PT * s, maxW = (c.seatW - 3) * s;
+  const bigPx = Math.min(40 * PT * s, (dh(c) - 3) * s * 0.62);
+  let studentPx = bigPx;
+  if (!teacher) {
+    const allNames = [];
+    c.desks.forEach(d => d.a.forEach(sid => { if (sid && names.has(sid)) allNames.push(names.get(sid)); }));
+    studentPx = fitPxAll(allNames, maxW, bigPx, 6 * PT * s);
+  }
   const R = Math.round, h1 = R(H1 * s), h2 = R(c.midH * s);
   for (const d of c.desks) {
     const w = deskW(c, d);
-    const out = d.x < -0.5 || d.y < -0.5 || d.x + w > P.w + 0.5 || d.y + dh(c) > P.h + 0.5;
-    const L = R(d.x * s), T = R(d.y * s), W = R((d.x + w) * s) - L, Hh = R((d.y + dh(c)) * s) - T;
+    const dxp = teacher ? d.x : r1(P.w - d.x - w), dyp = teacher ? d.y : r1(P.h - d.y - dh(c));
+    const out = dxp < -0.5 || dyp < -0.5 || dxp + w > P.w + 0.5 || dyp + dh(c) > P.h + 0.5;
+    const L = R(dxp * s), T = R(dyp * s), W = R((dxp + w) * s) - L, Hh = R((dyp + dh(c)) * s) - T;
     html += `<div class="desk ${sel.has(d.id) ? 'sel' : ''} ${out ? 'out' : ''}" data-id="${d.id}" style="left:${L}px;top:${T}px;width:${W + 1}px;height:${Hh + 1}px;--h1:${h1}px;--h2:${h2}px">`;
     for (let i = 0; i < d.n; i++) {
-      const sid = d.a[i]; let chip = '';
-      const sl = R((d.x + i * c.seatW) * s) - L, sr = R((d.x + (i + 1) * c.seatW) * s) - L;
-      if (sid) {
-        const nm = names.get(sid) || '?', g = gmap.get(sid);
-        const px = fitPx(nm, maxW, namePx, 6 * PT * s);
-        const alignStyle = c.nameAlign === 'left' ? `justify-content:flex-start;padding-left:${R((g ? 5 : 2) * s)}px` : 'justify-content:center';
-        chip = `<div class="chip ${an.bad.has(sid) ? 'bad' : an.warn.has(sid) ? 'warn' : ''}" data-sid="${sid}" style="font-size:${px}px;${alignStyle}">${g ? `<span class="gdot g-${g}"></span>` : ''}${esc(nm)}</div>`;
+      const si = teacher ? i : (d.n - 1 - i);
+      const sid = d.a[si]; let chip = '';
+      const sl = R((dxp + i * c.seatW) * s) - L, sr = R((dxp + (i + 1) * c.seatW) * s) - L;
+      if (teacher) {
+        if (sid) {
+          const nm = names.get(sid) || '?', g = gmap.get(sid);
+          const px = fitPx(nm, maxW, namePx, 6 * PT * s);
+          const alignStyle = c.nameAlign === 'left' ? `justify-content:flex-start;padding-left:${R((g ? 5 : 2) * s)}px` : 'justify-content:center';
+          chip = `<div class="chip ${an.bad.has(sid) ? 'bad' : an.warn.has(sid) ? 'warn' : ''}" data-sid="${sid}" style="font-size:${px}px;${alignStyle}">${g ? `<span class="gdot g-${g}"></span>` : ''}${esc(nm)}</div>`;
+        }
+        html += `<div class="seat" data-desk="${d.id}" data-i="${si}" style="left:${sl}px;width:${sr - sl + 1}px"><div class="nm">${chip}<button class="lockbtn ${d.l[si] ? 'on' : ''}" data-desk="${d.id}" data-i="${si}" title="${d.l[si] ? 'Platz ist gesperrt: Generator lässt ihn unverändert' : 'Platz beim Generieren festhalten'}" aria-label="Platz sperren">${LOCK_SVG}</button></div><div class="mid"><span>+</span><span>-</span></div><div class="bot"><span>AM:</span><span>HA:</span></div></div>`;
+      } else {
+        if (sid) {
+          const nm = names.get(sid) || '?';
+          const alignStyle = c.nameAlign === 'left' ? `justify-content:flex-start;padding-left:${R(2 * s)}px` : 'justify-content:center';
+          chip = `<div class="chip" data-sid="${sid}" style="font-size:${studentPx}px;${alignStyle}">${esc(nm)}</div>`;
+        }
+        html += `<div class="seat big" data-desk="${d.id}" data-i="${si}" style="left:${sl}px;width:${sr - sl + 1}px"><div class="nm">${chip}</div></div>`;
       }
-      html += `<div class="seat" data-desk="${d.id}" data-i="${i}" style="left:${sl}px;width:${sr - sl + 1}px"><div class="nm">${chip}<button class="lockbtn ${d.l[i] ? 'on' : ''}" data-desk="${d.id}" data-i="${i}" title="${d.l[i] ? 'Platz ist gesperrt: Generator lässt ihn unverändert' : 'Platz beim Generieren festhalten'}" aria-label="Platz sperren">${LOCK_SVG}</button></div><div class="mid"><span>+</span><span>-</span></div><div class="bot"><span>AM:</span><span>HA:</span></div></div>`;
     }
     html += `</div>`;
   }
   for (const it of c.items) {
     const vert = it.h > it.w * 1.6;
     const fs = Math.min(11 * PT * s, (vert ? it.w : it.h) * s * 0.62);
-    html += `<div class="item k-${it.kind} ${vert ? 'vert' : ''} ${sel.has(it.id) ? 'sel' : ''}" data-id="${it.id}" style="left:${it.x * s}px;top:${it.y * s}px;width:${it.w * s}px;height:${it.h * s}px;font-size:${fs}px"><span>${esc(it.text)}</span><div class="rz" data-id="${it.id}"></div></div>`;
+    const ix = teacher ? it.x : r1(P.w - it.x - it.w), iy = teacher ? it.y : r1(P.h - it.y - it.h);
+    html += `<div class="item k-${it.kind} ${vert ? 'vert' : ''} ${sel.has(it.id) ? 'sel' : ''}" data-id="${it.id}" style="left:${ix * s}px;top:${iy * s}px;width:${it.w * s}px;height:${it.h * s}px;font-size:${fs}px"><span>${esc(it.text)}</span><div class="rz" data-id="${it.id}"></div></div>`;
   }
   page.innerHTML = html;
 }
@@ -655,6 +689,10 @@ function renderTop() {
   const h = H();
   document.querySelector('[data-tb=undo]').disabled = !h.u.length;
   document.querySelector('[data-tb=redo]').disabled = !h.r.length;
+  const ro = viewMode === 'student';
+  document.querySelector('[data-tb=desk2]').disabled = ro;
+  document.querySelector('[data-tb=desk1]').disabled = ro;
+  $('#addItem').disabled = ro;
 }
 function renderCtx() {
   const c = cls(), el = $('#ctx');
@@ -912,7 +950,17 @@ $('#clsSel').addEventListener('change', e => { S.cur = e.target.value; sel.clear
 $('#btnNewCls').addEventListener('click', () => { const c = newClass('Neue Klasse'); makeGrid(c, 4, 3, 2); S.classes.push(c); S.cur = c.id; sel.clear(); markDirty(c); tab = 'kla'; renderAll(); setTimeout(() => { const i = document.querySelector('[data-cls=name]'); i && i.select(); }, 30); });
 $('#inName').addEventListener('change', e => mutate(c => { c.name = e.target.value.trim(); }));
 $('#inSubj').addEventListener('change', e => mutate(c => { c.subject = e.target.value.trim(); }));
-$('#btnExport').addEventListener('click', () => $('#dlgExport').showModal());
+$('#btnExport').addEventListener('click', () => {
+  $('#exNamesOnly').checked = viewMode === 'student';
+  $('#exNamesOnly').dispatchEvent(new Event('change'));
+  $('#dlgExport').showModal();
+});
+$('#viewToggle').addEventListener('click', e => {
+  const b = e.target.closest('[data-view]'); if (!b) return;
+  viewMode = b.dataset.view;
+  document.querySelectorAll('#viewToggle button').forEach(x => x.setAttribute('aria-pressed', x.dataset.view === viewMode));
+  sel.clear(); renderTop(); renderCanvas(); renderCtx();
+});
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 
 // ---------- toolbar ----------
@@ -949,6 +997,7 @@ const snapOn = ev => $('#snap').checked && !ev.altKey;
 
 page.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
+  if (viewMode === 'student') return; // Schülersicht ist gedreht und schreibgeschützt
   const lock = e.target.closest('.lockbtn');
   if (lock) { e.preventDefault(); const { desk, i } = lock.dataset; mutate(c => { const d = c.desks.find(x => x.id === desk); d.l[+i] = !d.l[+i]; }); return; }
   const chip = e.target.closest('.chip');
@@ -1059,11 +1108,11 @@ async function saveFile(filename, blob) {
   catch (err) { toast('Download ist in dieser Ansicht nicht verfügbar.'); }
 }
 function drawPage(doc, c, opt) {
-  const sw = c.seatW, names = dispNames(c);
+  const sw = c.seatW, names = dispNames(c), P = PAGE[c.orientation];
   doc.setDrawColor(0); doc.setLineWidth(0.25); doc.setTextColor(0);
   // header
   doc.setFont('helvetica', 'normal'); doc.setFontSize(18);
-  let x = 11; const y = 13;
+  let x = 11; const y = opt.rotate ? P.h - 13 : 13;
   const field = (label, val) => {
     doc.text(label, x, y); x += doc.getTextWidth(label) + 1.5;
     const w = Math.max(24, (val ? doc.getTextWidth(val) : 0) + 4);
@@ -1081,12 +1130,12 @@ function drawPage(doc, c, opt) {
     for (const d of c.desks) for (const sid of d.a) if (sid && names.has(sid)) allNames.push(names.get(sid));
     while (pt > 6) { doc.setFontSize(pt); if (allNames.every(t => doc.getTextWidth(t) <= sw - 4)) break; pt -= 0.5; }
     for (const d of c.desks) {
-      const W = d.n * sw;
-      doc.rect(d.x, d.y, W, DHc);
+      const W = d.n * sw, dx = opt.rotate ? P.w - d.x - W : d.x, dy = opt.rotate ? P.h - d.y - DHc : d.y;
+      doc.rect(dx, dy, W, DHc);
       for (let i = 0; i < d.n; i++) {
-        const X = d.x + i * sw, Y = d.y;
+        const X = dx + i * sw, Y = dy;
         if (i) doc.line(X, Y, X, Y + DHc);
-        const sid = d.a[i];
+        const sid = d.a[opt.rotate ? d.n - 1 - i : i];
         if (sid && names.has(sid)) {
           const t = names.get(sid);
           const cy = Y + DHc / 2 + pt * PT * 0.35;
@@ -1124,10 +1173,11 @@ function drawPage(doc, c, opt) {
   }
   if (opt.items) for (const it of c.items) {
     const vert = it.h > it.w * 1.6;
-    if (it.kind !== 'text') { doc.setDrawColor(90); doc.setFillColor(it.kind === 'fenster' ? 234 : 243, it.kind === 'fenster' ? 242 : 243, it.kind === 'fenster' ? 246 : 243); doc.rect(it.x, it.y, it.w, it.h, 'FD'); doc.setDrawColor(0); }
+    const ix = opt.rotate ? P.w - it.x - it.w : it.x, iy = opt.rotate ? P.h - it.y - it.h : it.y;
+    if (it.kind !== 'text') { doc.setDrawColor(90); doc.setFillColor(it.kind === 'fenster' ? 234 : 243, it.kind === 'fenster' ? 242 : 243, it.kind === 'fenster' ? 246 : 243); doc.rect(ix, iy, it.w, it.h, 'FD'); doc.setDrawColor(0); }
     let fs = Math.min(11, (vert ? it.w : it.h) * 0.62 / PT);
     doc.setFontSize(fs); doc.setTextColor(it.kind === 'text' ? 20 : 70);
-    const cx = it.x + it.w / 2, cy = it.y + it.h / 2;
+    const cx = ix + it.w / 2, cy = iy + it.h / 2;
     if (vert) doc.text(it.text, cx + fs * PT * 0.35, cy, { align: 'center', angle: 90 });
     else doc.text(it.text, cx, cy + fs * PT * 0.35, { align: 'center' });
     doc.setTextColor(0);
@@ -1140,7 +1190,7 @@ $('#exNamesOnly').addEventListener('change', e => {
 $('#exGo').addEventListener('click', async () => {
   if (!window.jspdf) { toast('PDF-Bibliothek nicht geladen. Seite neu laden und erneut versuchen.'); return; }
   const namesOnly = $('#exNamesOnly').checked;
-  const opt = { names: $('#exNames').checked, items: $('#exItems').checked, namesOnly };
+  const opt = { names: $('#exNames').checked, items: $('#exItems').checked, namesOnly, rotate: viewMode === 'student' };
   const list = $('#exAll').checked ? S.classes : [cls()];
   const { jsPDF } = window.jspdf;
   const o0 = list[0].orientation === 'quer' ? 'landscape' : 'portrait';
