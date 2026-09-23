@@ -518,6 +518,17 @@ function frontRank(c) {
   const lo = Math.min(...v), hi = Math.max(...v);
   return v.map(x => hi > lo ? (x - lo) / (hi - lo) : 0);
 }
+// Reihe je Tisch (0 = vorderste), Tische mit ähnlicher y-Position bilden eine Reihe
+function rowIndex(c) {
+  if (!c.desks.length) return [];
+  const cy = c.desks.map(d => d.y + dh(c) / 2);
+  const t = c.items.find(i => i.kind === 'tafel');
+  const top = t ? t.y + t.h / 2 <= cy.reduce((a, b) => a + b, 0) / cy.length : c.gen.frontSide !== 'unten';
+  const order = cy.map((y, k) => k).sort((a, b) => top ? cy[a] - cy[b] : cy[b] - cy[a]);
+  const row = new Array(cy.length); let r = 0;
+  order.forEach((k, j) => { if (j && Math.abs(cy[k] - cy[order[j - 1]]) > dh(c) / 2) r++; row[k] = r; });
+  return row;
+}
 
 // ---------- generator ----------
 function generate() {
@@ -531,9 +542,9 @@ function generate() {
   const free = c.students.filter(s => !fixed.has(s.id)).map(s => sidx.get(s.id));
   const freeSeats = seats.map((s, k) => s.locked ? -1 : k).filter(k => k >= 0);
   const N = c.students.length, SN = seats.length;
-  const gender = c.students.map(s => s.gender), front = c.students.map(s => !!s.front);
+  const gender = c.students.map(s => s.gender), front = c.students.map(s => !!s.front), front2 = c.students.map(s => !!s.front2);
   const deskOf = seats.map(s => s.di), idxIn = seats.map(s => s.i);
-  const nb = neighborMatrix(c), rank = frontRank(c);
+  const nb = neighborMatrix(c), rank = frontRank(c), row = rowIndex(c);
   const deskSeats = c.desks.map(() => []); seats.forEach((s, k) => deskSeats[s.di].push(k));
   const rules = c.rules.filter(r => sidx.has(r.a) && sidx.has(r.b)).map(r => [sidx.get(r.a), sidx.get(r.b), r.t === 'with' ? 1 : 0]);
   const g = c.gen;
@@ -567,6 +578,7 @@ function generate() {
       if (ks.length >= 2 && occ === 1) C += 6;
     }
     if (g.front) for (let s = 0; s < N; s++) if (front[s]) { const p = posOf[s]; C += p < 0 ? 30 : rank[deskOf[p]] * 30; }
+    if (g.front) for (let s = 0; s < N; s++) if (front2[s]) { const p = posOf[s]; if (p < 0) C += 80; else if (row[deskOf[p]] > 1) C += 50 + (row[deskOf[p]] - 2) * 15; }
     return C;
   }
   const apply = k => { if (slotSeat[k] >= 0) A[slotSeat[k]] = arr[k]; };
@@ -713,7 +725,7 @@ function renderCtx() {
 }
 function studentRow(s, an, placed) {
   const rc = cls().rules.filter(r => r.a === s.id || r.b === s.id).length;
-  return `<div class="srow ${placed ? 'placed' : ''} ${an.bad.has(s.id) ? 'bad' : ''}" data-sid="${s.id}"><span class="grip" aria-hidden="true">⠿</span><span class="gd ${s.gender ? 'g-' + s.gender : ''}"></span><span class="sn">${esc(fullName(s))}</span>${s.front ? '<span class="tag">vorne</span>' : ''}${rc ? `<span class="tag">${rc} Regel${rc > 1 ? 'n' : ''}</span>` : ''}</div>`;
+  return `<div class="srow ${placed ? 'placed' : ''} ${an.bad.has(s.id) ? 'bad' : ''}" data-sid="${s.id}"><span class="grip" aria-hidden="true">⠿</span><span class="gd ${s.gender ? 'g-' + s.gender : ''}"></span><span class="sn">${esc(fullName(s))}</span>${s.front ? '<span class="tag">vorne</span>' : ''}${s.front2 ? '<span class="tag">Reihe 1–2</span>' : ''}${rc ? `<span class="tag">${rc} Regel${rc > 1 ? 'n' : ''}</span>` : ''}</div>`;
 }
 function renderSide() {
   const c = cls(), el = $('#sideBody'), an = analyze(c);
@@ -742,7 +754,7 @@ function renderSide() {
     h += c.rules.length ? c.rules.map((r, k) => `<div class="rrow st-${an.status[k]}" title="${tip[an.status[k]]}"><span class="st">${icon[an.status[k]]}</span><span class="txt">${esc(N.get(r.a))} <em>${r.t === 'with' ? 'mit' : 'nicht mit'}</em> ${esc(N.get(r.b))}</span><button class="x" data-act="delRule" data-k="${k}" aria-label="Regel löschen">×</button></div>`).join('') : `<p class="hint">Noch keine Regeln.</p>`;
     h += `<h3>Automatisch verteilen</h3>
       <label class="chk"><input type="checkbox" data-gen="mix" ${c.gen.mix ? 'checked' : ''}> Jungen und Mädchen am Tisch mischen</label>
-      <label class="chk"><input type="checkbox" data-gen="front" ${c.gen.front ? 'checked' : ''}> „Soll vorne sitzen“ beachten</label>
+      <label class="chk"><input type="checkbox" data-gen="front" ${c.gen.front ? 'checked' : ''}> „Soll vorne sitzen“ und „erste zwei Reihen“ beachten</label>
       <label class="chk"><input type="checkbox" data-gen="neighbors" ${c.gen.neighbors ? 'checked' : ''}> Getrennte Schüler auch nicht an benachbarte Tische</label>
       <label class="field" style="margin-top:6px"><span>Vorne ist</span><select data-gen="frontSide"><option value="oben" ${c.gen.frontSide === 'oben' ? 'selected' : ''}>oben auf dem Blatt</option><option value="unten" ${c.gen.frontSide === 'unten' ? 'selected' : ''}>unten auf dem Blatt</option></select></label>
       <p class="hint">Liegt eine Tafel auf dem Plan, gilt ihre Position als vorne. Gesperrte Plätze (Schloss) bleiben beim Verteilen unverändert.</p>
@@ -798,6 +810,7 @@ function renderStudentDlg() {
     <label class="field"><span>Nachname</span><input type="text" data-sf="last" value="${esc(s.last)}"></label></div>
     <div class="field"><span>Geschlecht</span><div class="seg">${gb('m', 'männlich')}${gb('w', 'weiblich')}${gb('', 'keine Angabe')}</div></div>
     <label class="chk"><input type="checkbox" data-sf="front" ${s.front ? 'checked' : ''}> Soll vorne sitzen</label>
+    <label class="chk"><input type="checkbox" data-sf="front2" ${s.front2 ? 'checked' : ''}> Soll in den ersten beiden Reihen sitzen</label>
     <label class="field"><span>Notiz (erscheint nicht im Export)</span><textarea data-sf="note" rows="2">${esc(s.note || '')}</textarea></label>
     <h3>Soll zusammensitzen mit</h3><div class="chips">${chipList('with')}</div>${sel('with')}
     <h3>Soll nicht zusammensitzen mit</h3><div class="chips">${chipList('apart')}</div>${sel('apart')}
@@ -873,7 +886,7 @@ $('#impGo').addEventListener('click', () => {
   const replace = $('#impReplace').checked;
   mutate(c => {
     if (replace) { c.students = []; c.rules = []; c.desks.forEach(d => { d.a = d.a.map(() => null); }); }
-    list.forEach(p => c.students.push({ id: 's' + rid(), first: p.first, last: p.last, gender: p.gender, front: false, note: '' }));
+    list.forEach(p => c.students.push({ id: 's' + rid(), first: p.first, last: p.last, gender: p.gender, front: false, front2: false, note: '' }));
   });
   $('#dlgImport').close(); $('#impText').value = ''; $('#impFile').value = ''; updImpPreview();
   toast(`${list.length} Schüler importiert.`);
@@ -885,7 +898,7 @@ $('#sideBody').addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, c = cls();
   if (act === 'import') { updImpPreview(); $('#dlgImport').showModal(); }
-  else if (act === 'addStu') { let id; mutate(cc => { id = 's' + rid(); cc.students.push({ id, first: 'Neu', last: '', gender: '', front: false, note: '' }); }); openStudent(id); setTimeout(() => { const i = document.querySelector('[data-sf=first]'); i && i.select(); }, 30); }
+  else if (act === 'addStu') { let id; mutate(cc => { id = 's' + rid(); cc.students.push({ id, first: 'Neu', last: '', gender: '', front: false, front2: false, note: '' }); }); openStudent(id); setTimeout(() => { const i = document.querySelector('[data-sf=first]'); i && i.select(); }, 30); }
   else if (act === 'addRule') {
     const a = $('#rA').value, bb = $('#rB').value, t = $('#rT').value;
     if (a === bb) { toast('Bitte zwei verschiedene Schüler wählen.'); return; }
