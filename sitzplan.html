@@ -261,6 +261,7 @@ const dh = c => H1 + c.midH + H3;
 const PT = 0.3528;          // mm per pt
 const NB = 14;              // mm: desks closer than this count as neighbours
 const GRID = 2.5;           // snap in mm
+const SNAP_T = 2;           // mm: edge alignment tolerance
 const LS_KEY = 'sitzplan-v1';
 const ITEM_DEF = {
   tafel: { w: 90, h: 9, text: 'Tafel' }, pult: { w: 42, h: 18, text: 'Lehrertisch' },
@@ -1033,18 +1034,31 @@ page.addEventListener('pointerdown', e => {
     const id = el.dataset.id;
     if (e.shiftKey) { sel.has(id) ? sel.delete(id) : sel.add(id); updateSelClasses(); renderCtx(); if (!sel.has(id)) return; }
     else if (!sel.has(id)) { sel = new Set([id]); updateSelClasses(); renderCtx(); }
-    startMove(e); return;
+    startMove(e, id); return;
   }
   startBand(e);
 });
-function startMove(e) {
+const boxOf = (c, o) => c.desks.includes(o) ? { x: o.x, y: o.y, w: deskW(c, o), h: dh(c) } : { x: o.x, y: o.y, w: o.w, h: o.h };
+// snap a position: align edges with other objects (within SNAP_T mm), else round to the absolute grid
+function snapAxis(v, len, edges) {
+  let best = null;
+  for (const t of edges) for (const off of [0, len]) { const d = t - (v + off); if (Math.abs(d) <= SNAP_T && (best === null || Math.abs(d) < Math.abs(best))) best = d; }
+  return best !== null ? v + best : Math.round(v / GRID) * GRID;
+}
+function startMove(e, leadId) {
   const c = cls(), orig = [...sel].map(id => { const o = findObj(c, id); return o ? { id, x: o.x, y: o.y, el: page.querySelector(`[data-id="${id}"]`) } : null; }).filter(Boolean);
   const sx = e.clientX, sy = e.clientY; let moved = false, dx = 0, dy = 0;
+  const lo = findObj(c, leadId), lead = lo && boxOf(c, lo);
+  const others = [...c.desks, ...c.items].filter(o => !sel.has(o.id)).map(o => boxOf(c, o));
+  const ex = others.flatMap(b => [b.x, b.x + b.w]), ey = others.flatMap(b => [b.y, b.y + b.h]);
   track(ev => {
     if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 3) return;
     moved = true;
     dx = (ev.clientX - sx) / scale; dy = (ev.clientY - sy) / scale;
-    if (snapOn(ev)) { dx = Math.round(dx / GRID) * GRID; dy = Math.round(dy / GRID) * GRID; }
+    if (snapOn(ev)) {
+      if (lead) { dx = snapAxis(lead.x + dx, lead.w, ex) - lead.x; dy = snapAxis(lead.y + dy, lead.h, ey) - lead.y; }
+      else { dx = Math.round(dx / GRID) * GRID; dy = Math.round(dy / GRID) * GRID; }
+    }
     orig.forEach(o => { if (o.el) { o.el.style.left = (o.x + dx) * scale + 'px'; o.el.style.top = (o.y + dy) * scale + 'px'; } });
   }, () => {
     if (!moved || (!dx && !dy)) return;
