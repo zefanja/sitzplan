@@ -60,6 +60,8 @@ main{display:grid;grid-template-columns:320px 1fr;min-height:0}
 .tabs button{flex:1;border:0;border-radius:0;background:transparent;padding:10px 6px;color:var(--muted);border-bottom:2px solid transparent}
 .tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent);font-weight:500}
 #sideBody{overflow:auto;padding:14px;flex:1}
+.side-foot{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.side-foot .primary{flex:1}
 #sideBody h3{font-size:13px;font-weight:600;margin:18px 0 8px}
 #sideBody h3:first-child{margin-top:0}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -92,6 +94,11 @@ main{display:grid;grid-template-columns:320px 1fr;min-height:0}
 .rrow .prio:hover:not(:disabled){color:var(--accent);background:transparent}
 .rrow .prio:disabled{opacity:.3}
 .rrow .no{color:var(--muted);font-variant-numeric:tabular-nums}
+.rrow{cursor:grab;user-select:none}
+.rrow.dragging{opacity:.4}
+.rrow.drop-before{box-shadow:inset 0 2px 0 var(--accent)}
+.rrow.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
+[data-grp].drop{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
 .st{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none;font-weight:600}
 .st-ok .st{background:var(--accent-soft);color:var(--accent)}
 .st-bad .st{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
@@ -206,6 +213,7 @@ dialog::backdrop{background:rgba(20,28,32,.45)}
       <button role="tab" data-tab="kla" aria-selected="false">Klasse &amp; Layout</button>
     </div>
     <div id="sideBody"></div>
+    <div class="side-foot"><button class="primary" data-act="generate" title="Schüler nach Regeln und Sitzwünschen automatisch verteilen">Sitzplan generieren</button><button data-act="clearAll" title="Alle nicht gesperrten Plätze leeren">Plätze leeren</button></div>
   </aside>
   <section class="stage">
     <div class="toolbar">
@@ -788,20 +796,19 @@ function renderSide() {
     const all = c.rules.map((r, k) => ({ r, k })), main = all.filter(x => x.r.p !== 2), sub = all.filter(x => x.r.p === 2);
     const rrow = ({ r, k }, i, grp) => {
       const isSub = r.p === 2, up = isSub && !i ? 'Zur Hauptregel machen' : 'Höhere Priorität', down = !isSub && i === grp.length - 1 ? 'Zur Nebenregel machen' : 'Niedrigere Priorität';
-      return `<div class="rrow st-${an.status[k]}" title="${tip[an.status[k]]}"><span class="st">${icon[an.status[k]]}</span><span class="txt"><span class="no">${i + 1}.</span> ${esc(N.get(r.a))} <em>${r.t === 'with' ? 'mit' : 'nicht mit'}</em> ${esc(N.get(r.b))}</span><button class="prio" data-act="moveRule" data-k="${k}" data-d="-1" title="${up}" aria-label="${up}" ${!isSub && !i ? 'disabled' : ''}>▲</button><button class="prio" data-act="moveRule" data-k="${k}" data-d="1" title="${down}" aria-label="${down}" ${isSub && i === grp.length - 1 ? 'disabled' : ''}>▼</button><button class="x" data-act="delRule" data-k="${k}" aria-label="Regel löschen">×</button></div>`;
+      return `<div class="rrow st-${an.status[k]}" data-rk="${k}" title="${tip[an.status[k]]}"><span class="grip" aria-hidden="true">⠿</span><span class="st">${icon[an.status[k]]}</span><span class="txt"><span class="no">${i + 1}.</span> ${esc(N.get(r.a))} <em>${r.t === 'with' ? 'mit' : 'nicht mit'}</em> ${esc(N.get(r.b))}</span><button class="prio" data-act="moveRule" data-k="${k}" data-d="-1" title="${up}" aria-label="${up}" ${!isSub && !i ? 'disabled' : ''}>▲</button><button class="prio" data-act="moveRule" data-k="${k}" data-d="1" title="${down}" aria-label="${down}" ${isSub && i === grp.length - 1 ? 'disabled' : ''}>▼</button><button class="x" data-act="delRule" data-k="${k}" aria-label="Regel löschen">×</button></div>`;
     };
-    h += `<h3>Hauptregeln (${main.length})</h3>`;
+    h += `<h3 data-grp="main">Hauptregeln (${main.length})</h3>`;
     h += main.length ? main.map(rrow).join('') : `<p class="hint">Noch keine Hauptregeln.</p>`;
-    h += `<h3>Nebenregeln (${sub.length})</h3>`;
-    h += sub.length ? sub.map(rrow).join('') : '';
-    h += `<p class="hint">Die Reihenfolge ist die Priorität: Bei Konflikten gewinnt die Regel weiter oben. Nebenregeln werden nur erfüllt, wenn dadurch keine Hauptregel verletzt wird. Mit ▲ ▼ umsortieren oder zwischen Haupt- und Nebenregeln verschieben.</p>`;
+    h += `<h3 data-grp="sub">Nebenregeln (${sub.length})</h3>`;
+    h += sub.length ? sub.map(rrow).join('') : (main.length ? `<p class="hint" data-grp="sub">Regel hierher ziehen, um sie zur Nebenregel zu machen.</p>` : '');
+    h += `<p class="hint">Die Reihenfolge ist die Priorität: Bei Konflikten gewinnt die Regel weiter oben. Nebenregeln werden nur erfüllt, wenn dadurch keine Hauptregel verletzt wird. Regeln durch Ziehen oder mit ▲ ▼ umsortieren und zwischen Haupt- und Nebenregeln verschieben.</p>`;
     h += `<h3>Automatisch verteilen</h3>
       <label class="chk"><input type="checkbox" data-gen="mix" ${c.gen.mix ? 'checked' : ''}> Jungen und Mädchen am Tisch mischen</label>
       <label class="chk"><input type="checkbox" data-gen="front" ${c.gen.front ? 'checked' : ''}> „Soll vorne sitzen“, „erste zwei Reihen“ und „nicht letzte Reihe“ beachten</label>
       <label class="chk"><input type="checkbox" data-gen="neighbors" ${c.gen.neighbors ? 'checked' : ''}> Getrennte Schüler auch nicht an benachbarte Tische</label>
       <label class="field" style="margin-top:6px"><span>Vorne ist</span><select data-gen="frontSide"><option value="oben" ${c.gen.frontSide === 'oben' ? 'selected' : ''}>oben auf dem Blatt</option><option value="unten" ${c.gen.frontSide === 'unten' ? 'selected' : ''}>unten auf dem Blatt</option></select></label>
-      <p class="hint">Liegt eine Tafel auf dem Plan, gilt ihre Position als vorne. Gesperrte Plätze (Schloss) bleiben beim Verteilen unverändert.</p>
-      <div class="row" style="margin-top:8px"><button class="primary" data-act="generate">Sitzplan generieren</button><button data-act="clearAll">Plätze leeren</button></div>`;
+      <p class="hint">Liegt eine Tafel auf dem Plan, gilt ihre Position als vorne. Gesperrte Plätze (Schloss) bleiben beim Verteilen unverändert.</p>`;
     el.innerHTML = h;
     if (st.length >= 2) $('#rB').selectedIndex = 1;
   } else {
@@ -940,7 +947,7 @@ $('#impGo').addEventListener('click', () => {
 
 // ---------- side events ----------
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tab = b.dataset.tab; renderSide(); } });
-$('#sideBody').addEventListener('click', async e => {
+$('#side').addEventListener('click', async e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, c = cls();
   if (act === 'import') { updImpPreview(); $('#dlgImport').showModal(); }
@@ -1010,6 +1017,11 @@ $('#sideBody').addEventListener('change', async e => {
   }
 });
 $('#side').addEventListener('pointerdown', e => {
+  const rr = e.target.closest('.rrow');
+  if (rr && e.button === 0 && !e.target.closest('button')) {
+    if (e.pointerType === 'touch' && !e.target.closest('.grip')) return; // touch: drag only via grip
+    e.preventDefault(); startRuleDrag(e, rr); return;
+  }
   const row = e.target.closest('.srow'); if (!row || e.button !== 0) return;
   if (e.pointerType === 'touch' && !e.target.closest('.grip')) {
     // touch: tap opens, drag only via grip
@@ -1217,6 +1229,41 @@ function startBand(e) {
     c.desks.forEach(d => { if (hit(d.x, d.y, deskW(c, d), dh(c))) sel.add(d.id); });
     c.items.forEach(i => { if (hit(i.x, i.y, i.w, i.h)) sel.add(i.id); });
     updateSelClasses(); renderCtx();
+  });
+}
+// Regel per Ziehen umsortieren; Ziel ist eine andere Regel (davor/dahinter) oder eine Gruppenüberschrift (an den Anfang)
+function startRuleDrag(e, rowEl) {
+  const k = +rowEl.dataset.rk, sx = e.clientX, sy = e.clientY, side = $('#sideBody');
+  let ghost = null, over = null, after = false;
+  const clear = () => { over && over.classList.remove('drop-before', 'drop-after', 'drop'); };
+  track(ev => {
+    if (!ghost) {
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+      ghost = document.createElement('div'); ghost.className = 'ghost'; ghost.textContent = rowEl.querySelector('.txt').textContent; document.body.appendChild(ghost);
+      rowEl.classList.add('dragging');
+    }
+    ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px';
+    const t = document.elementFromPoint(ev.clientX, ev.clientY);
+    let tgt = t && side.contains(t) ? t.closest('.rrow, [data-grp]') : null;
+    if (tgt === rowEl) tgt = null;
+    clear(); over = tgt;
+    if (!tgt) return;
+    if (tgt.dataset.grp) { tgt.classList.add('drop'); return; }
+    const r = tgt.getBoundingClientRect(); after = ev.clientY > r.top + r.height / 2;
+    tgt.classList.add(after ? 'drop-after' : 'drop-before');
+  }, () => {
+    if (!ghost) return;
+    ghost.remove(); rowEl.classList.remove('dragging'); clear();
+    if (!over) return;
+    const grpName = over.dataset.grp, k2 = grpName ? -1 : +over.dataset.rk;
+    mutate(c => {
+      const r = c.rules[k], tr = c.rules[k2];
+      const toSub = grpName ? grpName === 'sub' : tr.p === 2;
+      const main = c.rules.filter(x => x.p !== 2 && x !== r), sub = c.rules.filter(x => x.p === 2 && x !== r), grp = toSub ? sub : main;
+      if (toSub) r.p = 2; else delete r.p;
+      grp.splice(tr ? grp.indexOf(tr) + (after ? 1 : 0) : 0, 0, r);
+      c.rules = [...main, ...sub];
+    });
   });
 }
 function startStudentDrag(e, sid) {
